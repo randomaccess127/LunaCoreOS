@@ -55,46 +55,77 @@ export default function PeopleView({ folders }) {
     return (
         <div className="fade-in people-view-container">
             <style>{`
-                .people-view-container h2 { font-size: 1.4rem; fontWeight: 700; margin-bottom: 1.5rem; }
-                .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; }
+                .people-view-container h2 { 
+                    font-size: 1.5rem; fontWeight: 800; margin-bottom: 2rem; 
+                    background: linear-gradient(to right, #fff, rgba(255,255,255,0.4));
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                }
+                .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; }
                 
+                .person-card {
+                    background: rgba(255, 255, 255, 0.03);
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    border-radius: 24px;
+                    overflow: hidden;
+                    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    cursor: pointer;
+                }
+                .person-card:hover {
+                    background: rgba(255, 255, 255, 0.07);
+                    border-color: rgba(167, 139, 250, 0.4);
+                    transform: translateY(-8px) scale(1.02);
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 20px rgba(167, 139, 250, 0.1);
+                }
+                
+                .person-img-wrapper { position: relative; width: 100%; aspectRatio: 1/1; overflow: hidden; }
+                .person-img { 
+                    width: 100%; height: 100%; object-fit: cover; 
+                    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .person-card:hover .person-img { transform: scale(1.1); }
+
+                .person-card-info { padding: 1.25rem; }
+                .person-card-name { margin: 0; fontSize: 1rem; fontWeight: 800; color: white; }
+                .person-card-folder { 
+                    margin: 0.3rem 0 0; fontSize: 0.7rem; color: rgba(255,255,255,0.35); 
+                    textTransform: uppercase; letterSpacing: 0.1em; fontWeight: 600;
+                }
+                .person-card-stats {
+                    margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;
+                    background: rgba(167, 139, 250, 0.1); padding: 4px 10px; border-radius: 20px;
+                    width: fit-content; border: 1px solid rgba(167, 139, 250, 0.2);
+                }
+
                 @media (max-width: 768px) {
-                    .people-view-container h2 { font-size: 1.1rem; margin-bottom: 1rem; }
-                    .people-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-                    .person-card { border-radius: 12px !important; }
-                    .person-card-info { padding: 0.75rem !important; }
-                    .person-card-name { font-size: 0.85rem !important; }
+                    .people-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+                    .person-card { border-radius: 18px; }
+                    .person-card-info { padding: 1rem; }
+                    .person-card-name { font-size: 0.85rem; }
                 }
             `}</style>
 
-            <h2>👥 People</h2>
+            <h2><span>👥</span> IDENTIFIED_PERSONNEL</h2>
 
             <div className="people-grid">
                 {allGroups.map((group, idx) => (
-                    <div key={idx} className="person-card" style={{
-                        background: 'rgba(255,255,255,0.04)', borderRadius: '20px', overflow: 'hidden',
-                        border: '1px solid rgba(255,255,255,0.08)', transition: 'transform 0.2s',
-                        cursor: 'default'
-                    }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'}
-                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                    >
-                        <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1' }}>
+                    <div key={idx} className="person-card">
+                        <div className="person-img-wrapper">
                             <img
                                 src={`https://drive.google.com/thumbnail?id=${group.coverImageId}&sz=w400`}
                                 alt={group.label}
                                 referrerPolicy="no-referrer"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                className="person-img"
                             />
                         </div>
-                        <div className="person-card-info" style={{ padding: '1rem' }}>
-                            <h4 className="person-card-name" style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{group.label}</h4>
-                            <p style={{ margin: '0.2rem 0 0', fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                Found in {group.folderName}
+                        <div className="person-card-info">
+                            <h4 className="person-card-name">{group.label || 'Unknown Subject'}</h4>
+                            <p className="person-card-folder">
+                                LOCATED IN {group.folderName}
                             </p>
-                            <div style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 800 }}>
-                                    {group.memberImageIds.length} PHOTOS
+                            <div className="person-card-stats">
+                                <span style={{ fontSize: '0.65rem', color: '#a78bfa', fontWeight: 800 }}>
+                                    {group.memberImageIds.length} CAPTURES
                                 </span>
                             </div>
                         </div>

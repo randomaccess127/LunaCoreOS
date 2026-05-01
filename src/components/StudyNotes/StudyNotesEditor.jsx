@@ -139,11 +139,22 @@ export default function StudyNotesEditor({
     const codeInputRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const noteRef = useRef(note); // Always points to latest note without stale closures
+    useEffect(() => { noteRef.current = note; }, [note]);
+
     const [isRecording, setIsRecording] = useState(false);
     const [refreshMedia, setRefreshMedia] = useState(0);
     const [title, setTitle] = useState(note.title || '');
     const [folderId, setFolderId] = useState(note.folder_id || '');
     const [tags, setTags] = useState(note.tags ? note.tags.split('|').filter(Boolean) : []);
+
+    // Sync state ONLY if note_id changes (switching notes)
+    // This prevents background auto-saves from wiping out what you're currently typing
+    useEffect(() => {
+        setTitle(note.title || '');
+        setFolderId(note.folder_id || '');
+        setTags(note.tags ? note.tags.split('|').filter(Boolean) : []);
+    }, [note.note_id]);
 
     const mentionItems = allNotes
         .filter(n => n.note_id !== note.note_id)
@@ -159,6 +170,7 @@ export default function StudyNotesEditor({
                 codeBlock: false,
                 heading: false,
                 blockquote: false,
+                history: true,
             }),
             Heading.configure({ levels: [1, 2, 3] }),
             Underline,
@@ -228,10 +240,76 @@ export default function StudyNotesEditor({
             FileExtension,
         ],
         content: note.content || '',
+        editorProps: {
+            attributes: {
+                class: 'sn-prose-editor',
+            },
+            handlePaste: (view, event) => {
+                const items = Array.from(event.clipboardData?.items || []);
+                const imageItem = items.find(item => item.type.startsWith('image'));
+                
+                if (imageItem) {
+                    const file = imageItem.getAsFile();
+                    if (file) {
+                        // Create a temporary base64 to show immediate feedback
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            const base64data = e.target.result;
+                            
+                            // Insert a placeholder/temp image
+                            view.dispatch(view.state.tr.replaceSelectionWith(
+                                view.state.schema.nodes.image.create({ src: base64data })
+                            ));
+
+                            // Trigger the real upload logic
+                            try {
+                                const res = await api.uploadMedia({
+                                    base64data: base64data.split(',')[1],
+                                    filename: `pasted_image_${Date.now()}.png`,
+                                    mime_type: file.type,
+                                    media_type: 'image',
+                                    uploaded_from: 'studynotes_paste',
+                                    source_id: note.note_id,
+                                });
+
+                                if (res.drive_link) {
+                                    const driveUrl = await api.getStreamableUrl(res.drive_link, 'large');
+                                    
+                                    // Update the editor: replace the base64 with the Drive URL
+                                    const { tr } = view.state;
+                                    view.state.doc.descendants((node, pos) => {
+                                        if (node.type.name === 'image' && node.attrs.src === base64data) {
+                                            tr.setNodeMarkup(pos, null, { ...node.attrs, src: driveUrl, media_id: res.media_id });
+                                        }
+                                    });
+                                    view.dispatch(tr);
+
+                                    // Refresh the media panel
+                                    setTimeout(() => setRefreshMedia(Date.now()), 500);
+                                }
+                            } catch (err) {
+                                console.error('Paste upload failed:', err);
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                        return true; // Handled
+                    }
+                }
+                return false;
+            }
+        },
         onUpdate: ({ editor }) => {
             if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
+            const currentHTML = editor.getHTML();
             window.snSaveTimeout = setTimeout(() => {
-                onTriggerAutoSave({ content: editor.getHTML(), title, folder_id: folderId, tags: tags.join('|') });
+                // Read media urls from ref so we never overwrite them with stale closure values
+                const latestNote = noteRef.current;
+                onTriggerAutoSave({
+                    content: currentHTML,
+                    audio_urls: latestNote.audio_urls,
+                    image_urls: latestNote.image_urls,
+                    file_urls:  latestNote.file_urls,
+                });
             }, 1500);
         },
     });
@@ -284,7 +362,7 @@ export default function StudyNotesEditor({
             };
             json.content = clean(json.content);
             editor.commands.setContent(json, false);
-            setRefreshMedia(prev => prev + 1);
+            setRefreshMedia(Date.now());
         };
         document.addEventListener('sn-media-deleted', handler);
         return () => document.removeEventListener('sn-media-deleted', handler);
@@ -420,12 +498,13 @@ export default function StudyNotesEditor({
                             ? currentMedia.join(',')
                             : [...currentMedia, res.media_id].join(',');
 
+                        if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
                         onSave({
                             ...note,
                             audio_urls: newMediaUrls,
                             content: editor.getHTML()
                         });
-                        setRefreshMedia(prev => prev + 1);
+                        setRefreshMedia(Date.now());
                     }
                 } catch (err) {
                     console.error('Audio upload failed:', err);
@@ -486,12 +565,14 @@ export default function StudyNotesEditor({
                     ? currentMedia.join(',')
                     : [...currentMedia, res.media_id].join(',');
 
+                if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
                 onSave({
                     ...note,
                     file_urls: newMediaUrls,
                     content: editor.getHTML()
                 });
-                setRefreshMedia(prev => prev + 1);
+                // Small delay to ensure DB consistency before refresh
+                setTimeout(() => setRefreshMedia(Date.now()), 500);
             }
         } catch (err) {
             console.error('Code file upload failed:', err);
@@ -527,7 +608,7 @@ export default function StudyNotesEditor({
             if (res.drive_link) {
                 // Step 3: Replace base64 in editor with persistent Drive URL
                 // This is critical — base64 is too large for Google Sheets cells
-                const driveUrl = api.getStreamableUrl(res.drive_link, 'large');
+                const driveUrl = await api.getStreamableUrl(res.drive_link, 'large');
                 const json = editor.getJSON();
                 
                 const replaceBase64 = (nodes) => {
@@ -549,13 +630,15 @@ export default function StudyNotesEditor({
                     ? currentImages.join(',') 
                     : [...currentImages, res.media_id].join(',');
 
+                if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
                 onSave({ 
                     ...note,
                     image_urls: newImageUrls,
                     content: editor.getHTML()  // Now contains Drive URL, not base64
                 });
 
-                setRefreshMedia(prev => prev + 1);
+                // Small delay to ensure DB consistency before refresh
+                setTimeout(() => setRefreshMedia(Date.now()), 500);
             }
         } catch (err) {
             console.error('Inline upload failed:', err);
@@ -578,11 +661,34 @@ export default function StudyNotesEditor({
                     onBlur={flushMeta}
                     placeholder="Untitled"
                 />
-                <span className="sn-header-date">
-                    {note.updated_at && !isNaN(new Date(note.updated_at))
-                        ? new Date(note.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                    <div className="sn-save-indicator" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            background: autoSaveStatus === 'saving' ? '#10b981' : (autoSaveStatus === 'saved' ? '#ef4444' : '#f59e0b'),
+                            boxShadow: autoSaveStatus === 'saving' ? '0 0 12px #10b981' : 'none',
+                            animation: autoSaveStatus === 'saving' ? 'sn-pulse-save 1.5s infinite' : 'none',
+                            transition: 'all 0.3s ease'
+                        }} />
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                            {autoSaveStatus === 'saving' ? 'Syncing' : (autoSaveStatus === 'saved' ? 'Saved' : 'Waiting')}
+                        </span>
+                    </div>
+                    <span className="sn-header-date">
+                        {note.updated_at && !isNaN(new Date(note.updated_at))
+                            ? new Date(note.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                            : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                </div>
+                <style>{`
+                    @keyframes sn-pulse-save {
+                        0% { opacity: 1; transform: scale(1); }
+                        50% { opacity: 0.4; transform: scale(1.3); }
+                        100% { opacity: 1; transform: scale(1); }
+                    }
+                `}</style>
             </div>
 
             <div className="sn-editor-meta-row">

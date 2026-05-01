@@ -1,5 +1,5 @@
 import { useAudio } from '../../context/AudioContext';
-import { Disc, Settings } from 'lucide-react';
+import { Disc, Settings, Play, Pause, SkipForward } from 'lucide-react';
 
 const TABS = [
     { id: 'dashboard', icon: '🌸', label: 'Dashboard' },
@@ -9,6 +9,7 @@ const TABS = [
     { id: 'habits', icon: '💕', label: 'Habits' },
     { id: 'videos', icon: '🎬', label: 'Videos' },
     { id: 'media', icon: '🎨', label: 'Media Library' },
+    { id: 'musicplayer', icon: '🎵', label: 'Music Player' },
     { id: 'vault', icon: '💎', label: 'Vault' },
     { id: 'lifemap', icon: '🧭', label: 'Life Map' },
     { id: 'timecapsule', icon: '📦', label: 'Time Capsule' },
@@ -29,7 +30,7 @@ const TABS = [
 ];
 
 export default function Sidebar({ active, onNavigate, userName, isOffline, onPreload, preload, isOpen, onClose, onMusicClick }) {
-    const { playing } = useAudio();
+    const { playing, currentTrack, playTrack, playNext } = useAudio();
 
     return (
         <>
@@ -39,7 +40,7 @@ export default function Sidebar({ active, onNavigate, userName, isOffline, onPre
             <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
 
             <div className="sidebar-logo">
-                <div className="logo-flex">
+                <div className="logo-flex" onClick={() => onNavigate('dashboard')} style={{ cursor: 'pointer' }}>
                     <img src="/profile.jpg" alt="Logo" className="app-logo-img" />
                     <div className="logo-text">
                         <h1>Luna's Notes</h1>
@@ -62,7 +63,30 @@ export default function Sidebar({ active, onNavigate, userName, isOffline, onPre
                         <span className="nav-label">{tab.label}</span>
                     </div>
                 ))}
+                <div style={{ height: '2rem', flexShrink: 0 }} />
             </nav>
+
+            {currentTrack && (
+                <div className="sidebar-mini-player">
+                    <div className="mini-player-info" onClick={() => onNavigate('musicplayer')}>
+                        <div className={`mini-disc ${playing ? 'spinning' : ''}`}>
+                            <Disc size={14} />
+                        </div>
+                        <div className="mini-details">
+                            <span className="mini-title">{currentTrack.title}</span>
+                            <span className="mini-artist">{currentTrack.artist}</span>
+                        </div>
+                    </div>
+                    <div className="mini-controls">
+                        <button onClick={() => playTrack(currentTrack)}>
+                            {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+                        </button>
+                        <button onClick={playNext}>
+                            <SkipForward size={14} fill="currentColor" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="sidebar-footer">
                 <div className="user-profile-stack">

@@ -58,10 +58,11 @@ self.addEventListener('fetch', (event) => {
                     
                     // Otherwise fetch and save to cache
                     return fetch(event.request).then((networkResponse) => {
-                        cache.put(event.request, networkResponse.clone());
+                        if (networkResponse && networkResponse.status === 200) {
+                            cache.put(event.request, networkResponse.clone());
+                        }
                         return networkResponse;
                     }).catch(() => {
-                        // If network fails and not in cache, we could return a placeholder icon
                         return null; 
                     });
                 });
@@ -70,7 +71,14 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // 3. App Shell Strategy: Stale-While-Revalidate
+    // 3. API Strategy: Network Only
+    // Never cache Supabase API calls, otherwise users see stale data (double-refresh bug)
+    if (url.includes('supabase.co') || url.includes('script.google.com')) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
+    // 4. App Shell Strategy: Stale-While-Revalidate
     event.respondWith(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.match(event.request).then((cachedResponse) => {

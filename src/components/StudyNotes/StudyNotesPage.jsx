@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as api from '../../services/api';
 import StudyNotesSidebar from './StudyNotesSidebar';
 import StudyNotesEditor from './StudyNotesEditor';
@@ -7,11 +7,78 @@ import './StudyNotes.css';
 export default function StudyNotesPage() {
     const [folders, setFolders] = useState([]);
     const [notes, setNotes] = useState([]);
-    const [activeNoteId, setActiveNoteId] = useState(null);
-    const [activeFolderId, setActiveFolderId] = useState(null);
+    const [activeNoteId, setActiveNoteId] = useState(() => localStorage.getItem('luna_active_note') || null);
+    const [activeFolderId, setActiveFolderId] = useState(() => localStorage.getItem('luna_active_folder') || null);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
+
+    useEffect(() => {
+        if (activeNoteId) localStorage.setItem('luna_active_note', activeNoteId);
+        else localStorage.removeItem('luna_active_note');
+    }, [activeNoteId]);
+
+    useEffect(() => {
+        if (activeFolderId) localStorage.setItem('luna_active_folder', activeFolderId);
+        else localStorage.removeItem('luna_active_folder');
+    }, [activeFolderId]);
+
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [migrationStatus, setMigrationStatus] = useState('');
+
+    const handleMigrateStudy = async () => {
+        if (!window.confirm('This will move all your Study Folders and Notes from Google Sheets to Supabase. Continue?')) return;
+        setIsMigrating(true);
+        setMigrationStatus('Fetching data from Sheets...');
+        try {
+            // 1. Migrate Folders
+            const oldFolders = await api.getStudyFoldersLegacy();
+            setMigrationStatus(`Migrating ${oldFolders.length} folders...`);
+            for (const folder of oldFolders) {
+                await api.supabase.from('study_folders').upsert({
+                    folder_id: folder.folder_id,
+                    folder_name: folder.folder_name,
+                    parent_folder_id: folder.parent_folder_id,
+                    color: folder.color,
+                    icon: folder.icon,
+                    created_at: folder.created_at || new Date().toISOString()
+                });
+            }
+
+            // 2. Migrate Notes
+            const oldNotes = await api.getStudyNotesLegacy();
+            setMigrationStatus(`Migrating ${oldNotes.length} notes...`);
+            
+            const chunkSize = 20;
+            for (let i = 0; i < oldNotes.length; i += chunkSize) {
+                const chunk = oldNotes.slice(i, i + chunkSize).map(n => ({
+                    note_id: n.note_id,
+                    title: n.title || '',
+                    folder_id: n.folder_id || '',
+                    content: n.content || '',
+                    tags: n.tags || '',
+                    linked_notes: n.linked_notes || '',
+                    audio_urls: n.audio_urls || '',
+                    image_urls: n.image_urls || '',
+                    file_urls: n.file_urls || '',
+                    created_at: n.created_at || new Date().toISOString(),
+                    updated_at: n.updated_at || new Date().toISOString()
+                }));
+                
+                const { error } = await api.supabase.from('study_notes').upsert(chunk);
+                if (error) throw error;
+                setMigrationStatus(`Migrated ${Math.min(i + chunkSize, oldNotes.length)} / ${oldNotes.length} notes...`);
+            }
+
+            setMigrationStatus('Migration Successful! Refreshing...');
+            setTimeout(() => window.location.reload(), 2000);
+        } catch (err) {
+            console.error('Migration failed:', err);
+            setMigrationStatus(`Error: ${err.message}`);
+        } finally {
+            setIsMigrating(false);
+        }
+    };
 
     useEffect(() => {
         loadData();
@@ -53,8 +120,7 @@ export default function StudyNotesPage() {
     }, [folders, notes]);
 
     const handleNewNote = async () => {
-        const newNote = {
-            note_id: `note_${Date.now()}`,
+        const tempNote = {
             title: '',
             content: '',
             folder_id: activeFolderId || '',
@@ -65,34 +131,84 @@ export default function StudyNotesPage() {
             updated_at: new Date().toISOString()
         };
         try {
-            await api.createStudyNote(newNote);
-            setNotes([newNote, ...notes]);
-            setActiveNoteId(newNote.note_id);
+            const created = await api.createStudyNote(tempNote);
+            if (created && created.note_id) {
+                setNotes(prev => [created, ...prev]);
+                setActiveNoteId(created.note_id);
+            }
         } catch (err) {
             console.error('Create note failed:', err);
         }
     };
 
-    const handleUpdateNote = async (updates) => {
-        if (!activeNoteId) return;
-        
-        // Optimistically update local state immediately so UI doesn't jump
-        setNotes(prevNotes => prevNotes.map(n => n.note_id === activeNoteId ? { ...n, ...updates } : n));
-        
-        try {
-            const updated = await api.updateStudyNote({ ...activeNote, ...updates, note_id: activeNoteId });
-            if (updated && updated.note_id) {
-                setNotes(prevNotes => prevNotes.map(n => n.note_id === activeNoteId ? { ...n, ...updated } : n));
+    const saveQueue = useRef(Promise.resolve());
+    const [pendingSaves, setPendingSaves] = useState(0);
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (pendingSaves > 0) {
+                e.preventDefault();
+                e.returnValue = '';
             }
-        } catch (err) {
-            console.error('Update note failed:', err);
-        }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [pendingSaves]);
+
+    const handleUpdateNote = (updates) => {
+        if (!activeNoteId) return;
+
+        setPendingSaves(prev => prev + 1);
+        setAutoSaveStatus('saving');
+
+        saveQueue.current = saveQueue.current.then(async () => {
+            return new Promise((resolve) => {
+                setNotes(prevNotes => {
+                    const currentNote = prevNotes.find(n => n.note_id === activeNoteId);
+                    if (!currentNote) {
+                        setPendingSaves(prev => Math.max(0, prev - 1));
+                        resolve();
+                        return prevNotes;
+                    }
+
+                    const mergedNote = {
+                        ...currentNote,
+                        ...updates,
+                        audio_urls: updates.audio_urls !== undefined ? updates.audio_urls : currentNote.audio_urls,
+                        image_urls: updates.image_urls !== undefined ? updates.image_urls : currentNote.image_urls,
+                        file_urls:  updates.file_urls  !== undefined ? updates.file_urls  : currentNote.file_urls,
+                    };
+
+                    // ✅ Fire-and-forget — don't replace local state with server response
+                    // The optimistic update (mergedNote) is the source of truth.
+                    // We only patch `updated_at` from the server to keep timestamps accurate.
+                    api.updateStudyNote(mergedNote).then(serverNote => {
+                        if (serverNote?.updated_at) {
+                            setNotes(latest => latest.map(n =>
+                                n.note_id === activeNoteId
+                                    ? { ...n, updated_at: serverNote.updated_at }
+                                    : n
+                            ));
+                        }
+                        setAutoSaveStatus('saved');
+                        setPendingSaves(prev => Math.max(0, prev - 1));
+                        resolve();
+                    }).catch(err => {
+                        console.error('Queue update failed:', err);
+                        setAutoSaveStatus('error');
+                        setPendingSaves(prev => Math.max(0, prev - 1));
+                        resolve();
+                    });
+
+                    // Return the optimistic state immediately — no waiting for server
+                    return prevNotes.map(n => n.note_id === activeNoteId ? mergedNote : n);
+                });
+            });
+        });
     };
 
-    const handleAutoSave = async (updates) => {
-        setAutoSaveStatus('saving');
-        await handleUpdateNote(updates);
-        setAutoSaveStatus('saved');
+    const handleAutoSave = (updates) => {
+        handleUpdateNote(updates);
     };
 
     const handleDeleteNote = async () => {
@@ -161,6 +277,9 @@ export default function StudyNotesPage() {
                 onDeleteFolder={handleDeleteFolder}
                 onNewNote={handleNewNote}
                 noteCounts={noteCounts}
+                isMigrating={isMigrating}
+                migrationStatus={migrationStatus}
+                onMigrate={handleMigrateStudy}
             />
 
             <section className="sn-editor-panel">

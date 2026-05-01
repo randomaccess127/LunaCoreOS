@@ -7,7 +7,7 @@ import { SkeletonCard } from '../Shared/Skeleton';
 const TYPE_ICONS = { audio: '🔊', image: '🖼️', file: '📎', video: '🎬' };
 
 export default function MediaLibraryPage() {
-    const { media, loading, upload, remove, scan } = useMedia();
+    const { media, loading, upload, remove, scan, isUploading, uploadProgress } = useMedia();
     const [filter, setFilter] = useState('all');
     const [lb, setLb] = useState(null);
     const [search, setSearch] = useState('');
@@ -51,6 +51,21 @@ export default function MediaLibraryPage() {
                     <button className="btn btn-ghost btn-sm" onClick={scan}>🔍 Scan Orphans</button>
                 </div>
             </div>
+
+            {isUploading && (
+                <div className="progress-container">
+                    <div className="progress-header">
+                        <div className="progress-label">
+                            <span className="spinner-mini" style={{ width: 14, height: 14, borderWidth: 2 }}></span>
+                            Uploading your file...
+                        </div>
+                        <div className="progress-value">{Math.round(uploadProgress)}%</div>
+                    </div>
+                    <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
+                    </div>
+                </div>
+            )}
 
             {/* Search + Filters */}
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>

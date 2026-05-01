@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import GooglePhotos from './GooglePhotos';
 import PeopleView from './PeopleView';
 import VaultLock from './VaultLock';
-import { getVaultFolders, addVaultFolder, removeVaultFolder } from '../../services/api';
+import { getVaultFolders, addVaultFolder, removeVaultFolder, getAppPassword, setAppPassword } from '../../services/api';
+import { requestDriveAccess, clearDriveToken } from '../../services/googleAuth';
 
 const extractFolderId = (input) => {
     if (!input) return '';
@@ -28,10 +29,19 @@ function AddFolderModal({ onAdd, onClose }) {
         if (!name.trim()) { setErr('Please enter a name.'); return; }
         setSaving(true);
         try {
-            const res = await addVaultFolder(name.trim(), folderId);
-            onAdd({ id: res.id || Date.now().toString(), name: name.trim(), folderId });
+            const res = await addVaultFolder({ name: name.trim(), folder_id: folderId });
+            // Ensure we map the response correctly for immediate UI update
+            const newFolder = {
+                id: res.id || res.ID,
+                name: res.name || res.Name,
+                folder_id: res.folder_id || res.FolderID
+            };
+            onAdd(newFolder);
             onClose();
-        } catch { setErr('Failed to save. Try again.'); }
+        } catch (err) { 
+            console.error('Add folder error:', err);
+            setErr('Failed to save. Make sure your SQL table is ready!'); 
+        }
         finally { setSaving(false); }
     };
 
@@ -59,25 +69,48 @@ function AddFolderModal({ onAdd, onClose }) {
 // ─── Sidebar Nav Button ──────────────────────────────────────
 function NavBtn({ active, onClick, icon, label, onRemove }) {
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div className="nav-btn-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+            <style>{`
+                .nav-btn-container { animation: vault-fade-in 0.3s ease-out forwards; }
+                .vault-nav-btn {
+                    flex: 1; display: flex; alignItems: center; gap: 0.75rem;
+                    padding: 0.75rem 1rem; border-radius: 14px; border: 1px solid transparent;
+                    text-align: left; cursor: pointer; font-size: 0.88rem; font-weight: 600;
+                    background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.6);
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    backdrop-filter: blur(10px);
+                }
+                .vault-nav-btn:hover {
+                    background: rgba(255,255,255,0.08);
+                    color: white;
+                    border-color: rgba(255,255,255,0.1);
+                    transform: translateX(4px);
+                }
+                .vault-nav-btn.active {
+                    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+                    color: white;
+                    box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+                    border-color: rgba(255,255,255,0.2);
+                }
+                .vault-remove-btn {
+                    background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);
+                    color: #f87171; border-radius: 10px; width: 28px; height: 28px;
+                    cursor: pointer; font-size: 10px; display: flex; align-items: center;
+                    justify-content: center; transition: all 0.2s;
+                    opacity: 0; transform: scale(0.8);
+                }
+                .nav-btn-container:hover .vault-remove-btn { opacity: 1; transform: scale(1); }
+                .vault-remove-btn:hover { background: #ef4444; color: white; border-color: transparent; }
+            `}</style>
             <button
                 onClick={onClick}
-                style={{
-                    flex: 1, display: 'flex', alignItems: 'center', gap: '0.6rem',
-                    padding: '0.65rem 0.9rem', borderRadius: '12px', border: 'none',
-                    textAlign: 'left', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
-                    background: active ? 'var(--accent, #a78bfa)' : 'rgba(255,255,255,0.05)',
-                    color: active ? 'white' : 'rgba(255,255,255,0.7)',
-                    boxShadow: active ? '0 4px 12px rgba(167,139,250,0.25)' : 'none',
-                    transition: 'all 0.2s', overflow: 'hidden',
-                }}
+                className={`vault-nav-btn ${active ? 'active' : ''}`}
             >
-                <span style={{ fontSize: '1rem', flexShrink: 0 }}>{icon}</span>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{icon}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
             </button>
             {onRemove && (
-                <button onClick={onRemove} title="Remove"
-                    style={{ background: 'rgba(255,255,255,0.07)', border: 'none', color: 'rgba(255,255,255,0.4)', borderRadius: '8px', width: '22px', height: '22px', cursor: 'pointer', fontSize: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button onClick={onRemove} className="vault-remove-btn" title="Remove Folder">
                     ✕
                 </button>
             )}
@@ -91,31 +124,53 @@ function VaultPage() {
     const [activeTab, setActiveTab] = useState('liked');
     const [showAdd, setShowAdd] = useState(false);
     const [loadingFolders, setLoadingFolders] = useState(true);
+    const [isGoogleAuth, setIsGoogleAuth] = useState(false);
 
     useEffect(() => {
+        // Monitor our specific GSI token in localStorage
+        const checkAuth = () => {
+            const token = localStorage.getItem('luna_drive_token');
+            const expiry = parseInt(localStorage.getItem('luna_drive_token_expiry') || '0', 10);
+            setIsGoogleAuth(!!token && Date.now() < expiry);
+        };
+        const timer = setInterval(checkAuth, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const handleGoogleLogin = async () => {
+        try {
+            await requestDriveAccess();
+            setIsGoogleAuth(true);
+        } catch (err) {
+            console.error("Google Login Failed:", err);
+        }
+    };
+
+    const loadFolders = () => {
+        setLoadingFolders(true);
         getVaultFolders()
             .then(res => {
-                const folderList = res.data?.folders || [];
+                const folderList = Array.isArray(res) ? res : (res.data?.folders || []);
                 setFolders(folderList);
-                // Cache folders to localStorage for offline access
                 localStorage.setItem('vault_folders_cache', JSON.stringify({
                     folders: folderList,
                     cachedAt: Date.now()
                 }));
             })
             .catch(() => {
-                // Offline: load from cache
-                if (!navigator.onLine) {
-                    const cached = localStorage.getItem('vault_folders_cache');
-                    if (cached) {
-                        try {
-                            const { folders: cachedFolders } = JSON.parse(cached);
-                            setFolders(cachedFolders);
-                        } catch (e) { console.warn('Cache error:', e); }
-                    }
+                const cached = localStorage.getItem('vault_folders_cache');
+                if (cached) {
+                    try {
+                        const { folders: cachedFolders } = JSON.parse(cached);
+                        setFolders(cachedFolders);
+                    } catch (e) { }
                 }
             })
             .finally(() => setLoadingFolders(false));
+    };
+
+    useEffect(() => {
+        loadFolders();
     }, []);
 
     const handleAddFolder = (folder) => {
@@ -135,56 +190,123 @@ function VaultPage() {
     const activeFolder = folders.find(f => f.id === activeTab);
 
     return (
-        <div className="vault-layout">
+        <div className="vault-layout" style={{ 
+            display: 'flex', height: '100vh', width: '100%', background: '#0a0a0f', color: 'white',
+            backgroundImage: 'radial-gradient(circle at 0% 0%, rgba(167,139,250,0.05) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(124,58,237,0.05) 0%, transparent 50%)',
+            overflow: 'hidden',
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0
+        }}>
+            <style>{`
+                .vault-sidebar {
+                    width: 280px; background: rgba(15, 15, 25, 0.7);
+                    backdrop-filter: blur(30px); border-right: 1px solid rgba(255,255,255,0.08);
+                    display: flex; flex-direction: column; padding: 1.5rem;
+                    flex-shrink: 0; height: 100%;
+                }
+                .vault-title { 
+                    font-size: 1.25rem; font-weight: 800; margin-bottom: 2rem; 
+                    background: linear-gradient(to right, #fff, rgba(255,255,255,0.4));
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                    display: flex; align-items: center; gap: 10px;
+                }
+                .vault-nav-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+                .vault-content { 
+                    flex: 1; flex-basis: 0; min-width: 0;
+                    overflow-y: auto; overflow-x: hidden; 
+                    padding: 2rem; position: relative; height: 100%; 
+                    box-sizing: border-box; 
+                }
+                
+                .vault-add-btn {
+                    margin-top: 1rem; width: 100%; padding: 0.85rem; border-radius: 14px;
+                    border: 1px dashed rgba(167,139,250,0.4); background: rgba(167,139,250,0.05);
+                    color: #a78bfa; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    text-align: center;
+                }
+                .vault-add-btn:hover {
+                    background: rgba(167,139,250,0.15); border-color: #a78bfa;
+                    transform: translateY(-2px); box-shadow: 0 10px 20px rgba(167,139,250,0.1);
+                    color: white;
+                }
+                
+                @keyframes vault-fade-in {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .vault-content > div { animation: vault-fade-in 0.4s ease-out forwards; }
+                
+                /* Mobile Overrides */
+                @media (max-width: 768px) {
+                    .vault-layout { flex-direction: column; }
+                    .vault-sidebar { display: none; }
+                }
+            `}</style>
+
             {/* ─── Mobile Segmented Control ─── */}
-            <div className={`vault-mobile-nav mobile-only ${isFolderActive ? 'hidden' : ''}`}>
-                <div className="vault-segments">
-                    <button className={activeTab === 'liked' ? 'active' : ''} onClick={() => setActiveTab('liked')}>❤️ Liked</button>
-                    <button className={activeTab === 'folders_menu' ? 'active' : ''} onClick={() => setActiveTab('folders_menu')}>🗂️ Folders</button>
-                    <button className={activeTab === 'people' ? 'active' : ''} onClick={() => setActiveTab('people')}>👥 People</button>
+            <div className={`vault-mobile-nav mobile-only ${isFolderActive ? 'hidden' : ''}`} style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)' }}>
+                <div className="vault-segments" style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '12px' }}>
+                    <button style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: activeTab === 'liked' ? '#a78bfa' : 'transparent', color: 'white' }} onClick={() => setActiveTab('liked')}>❤️ Liked</button>
+                    <button style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: activeTab === 'folders_menu' ? '#a78bfa' : 'transparent', color: 'white' }} onClick={() => setActiveTab('folders_menu')}>🗂️ Folders</button>
+                    <button style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: activeTab === 'people' ? '#a78bfa' : 'transparent', color: 'white' }} onClick={() => setActiveTab('people')}>👥 People</button>
                 </div>
             </div>
 
             {/* ─── Mobile Folder Top Bar ─── */}
             {isFolderActive && (
-                <div className="vault-mobile-folder-header mobile-only">
-                    <button className="back-btn" onClick={() => setActiveTab('folders_menu')}>
+                <div className="vault-mobile-folder-header mobile-only" style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button className="back-btn" onClick={() => setActiveTab('folders_menu')} style={{ background: 'transparent', border: 'none', color: '#a78bfa', fontSize: '1rem', cursor: 'pointer' }}>
                         ‹ Back
                     </button>
-                    <span className="folder-title">{activeFolder?.name}</span>
+                    <span className="folder-title" style={{ fontWeight: 700 }}>{activeFolder?.name}</span>
                 </div>
             )}
 
             {/* ─── Left Sidebar (Desktop Only) ─── */}
             <div className="vault-sidebar desktop-only">
-                <h2 className="vault-title">🔒 Vault</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <h2 className="vault-title" style={{ margin: 0 }}><span>🔒</span> VAULT_CORE</h2>
+                    <button onClick={loadFolders} className="btn btn-ghost btn-xs" title="Sync Database" style={{ padding: '4px', opacity: 0.5 }}>🔄</button>
+                </div>
 
                 <div className="vault-nav-scroll">
-                    {/* Liked — always first */}
                     <NavBtn
                         active={activeTab === 'liked'}
                         onClick={() => setActiveTab('liked')}
                         icon="❤️"
-                        label="Liked"
+                        label="Liked Items"
                     />
 
                     <NavBtn
                         active={activeTab === 'people'}
                         onClick={() => setActiveTab('people')}
                         icon="👥"
-                        label="People"
+                        label="People & Groups"
                     />
 
-                    {/* Divider */}
+                    {!isGoogleAuth && (
+                        <button 
+                            onClick={handleGoogleLogin}
+                            style={{ 
+                                margin: '1rem 0.5rem', padding: '0.8rem', borderRadius: '14px', 
+                                background: 'linear-gradient(135deg, #4285F4, #34A853)',
+                                border: 'none', color: 'white', fontWeight: 800, fontSize: '0.75rem',
+                                cursor: 'pointer', boxShadow: '0 10px 20px rgba(66,133,244,0.3)',
+                                animation: 'vault-fade-in 0.5s ease-out'
+                            }}
+                        >
+                            🔑 CONNECT_GOOGLE_DRIVE
+                        </button>
+                    )}
+
                     {folders.length > 0 && (
-                        <div className="vault-divider" style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', padding: '0.5rem 0.9rem 0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                            Folders
+                        <div className="vault-divider" style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', padding: '1.25rem 0.9rem 0.5rem', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 800 }}>
+                            Secure Folders
                         </div>
                     )}
 
-                    {/* Folder list */}
                     {loadingFolders ? (
-                        <div className="vault-loading">Loading…</div>
+                        <div className="vault-loading" style={{ padding: '1rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem' }}>Decrypting...</div>
                     ) : (
                         folders.map(folder => (
                             <NavBtn
@@ -198,15 +320,11 @@ function VaultPage() {
                         ))
                     )}
 
-                    {/* Add folder — bottom of sidebar */}
                     <button
                         className="vault-add-btn"
                         onClick={() => setShowAdd(true)}
-                        style={{ marginTop: '0.5rem', width: '100%', padding: '0.55rem 0.9rem', borderRadius: '10px', border: '1px dashed rgba(255,255,255,0.18)', background: 'transparent', color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem', cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; }}
                     >
-                        + Add Folder
+                        + Add Folder Link
                     </button>
                 </div>
             </div>
@@ -250,6 +368,5 @@ function VaultPage() {
     );
 }
 
-// Wrap with password lock
 const LockedVaultPage = () => <VaultLock><VaultPage /></VaultLock>;
 export default LockedVaultPage;

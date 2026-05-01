@@ -13,6 +13,7 @@
   "type": "module",
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@supabase/supabase-js": "^2.105.1",
     "@tiptap/extension-blockquote": "^3.22.4",
     "@tiptap/extension-code-block-lowlight": "^3.22.4",
     "@tiptap/extension-heading": "^3.22.4",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.4",
+    "supabase": "^2.98.0",
     "vite": "^7.3.1"
   }
 }

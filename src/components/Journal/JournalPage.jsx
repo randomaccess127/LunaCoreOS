@@ -14,6 +14,7 @@ export default function JournalPage() {
     const [draft, setDraft] = useState({});
     const [saving, setSaving] = useState(false);
     const [savingMedia, setSavingMedia] = useState(false);
+    const [mediaProgress, setMediaProgress] = useState(0);
     const [savedAt, setSavedAt] = useState('');
     const [mediaItems, setMediaItems] = useState({ audio: [], images: [], files: [] });
     const autoSaveTimer = useRef(null);
@@ -23,6 +24,57 @@ export default function JournalPage() {
     const [mobileView, setMobileView] = useState('list'); // 'list' or 'editor'
     const [confirmDate, setConfirmDate] = useState(null);
     const isMobile = window.innerWidth <= 768;
+
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [migrationStatus, setMigrationStatus] = useState('');
+
+    const handleMigrateJournal = async () => {
+        if (!window.confirm('This will move all your Journal entries from Google Sheets to Supabase. Continue?')) return;
+        setIsMigrating(true);
+        setMigrationStatus('Fetching entries from Sheets...');
+        try {
+            const oldEntries = await api.getEntriesLegacy();
+            setMigrationStatus(`Migrating ${oldEntries.length} entries...`);
+            
+            const chunkSize = 20;
+            for (let i = 0; i < oldEntries.length; i += chunkSize) {
+                const chunk = oldEntries.slice(i, i + chunkSize).map(e => ({
+                    entry_id: e.entry_id,
+                    date: api.sanitizeDate(e.date),
+                    day_of_week: e.day_of_week,
+                    time_created: e.time_created || new Date().toISOString(),
+                    time_modified: e.time_modified || new Date().toISOString(),
+                    title: e.title || '',
+                    text_content: e.text_content || '',
+                    mood: e.mood || '',
+                    energy_level: String(e.energy_level || ''),
+                    weather: e.weather || '',
+                    word_count: parseInt(e.word_count) || 0,
+                    audio_refs: e.audio_refs || '',
+                    image_refs: e.image_refs || '',
+                    file_refs: e.file_refs || '',
+                    tags: e.tags || '',
+                    location: e.location || '',
+                    is_private: e.is_private === 'true' || e.is_private === true,
+                    actionable_insight_id: e.actionable_insight_id || '',
+                    streak_day: parseInt(e.streak_day) || 0,
+                    status: e.status || 'published'
+                }));
+                
+                const { error } = await api.supabase.from('journal_entries').upsert(chunk);
+                if (error) throw error;
+                setMigrationStatus(`Migrated ${Math.min(i + chunkSize, oldEntries.length)} / ${oldEntries.length} notes...`);
+            }
+
+            setMigrationStatus('Migration Successful! Refreshing...');
+            setTimeout(() => window.location.reload(), 2000);
+        } catch (err) {
+            console.error('Migration failed:', err);
+            setMigrationStatus(`Error: ${err.message}`);
+        } finally {
+            setIsMigrating(false);
+        }
+    };
 
     // Open the most recent entry, or a blank new one
     useEffect(() => {
@@ -157,6 +209,12 @@ export default function JournalPage() {
     const uploadMedia = async (file, mediaType) => {
         if (!active || !file) return;
 
+        const MAX_SIZE = 45 * 1024 * 1024;
+        if (file.size > MAX_SIZE) {
+            alert(`File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Google Apps Script limit is ~50MB. Please use a smaller file.`);
+            return;
+        }
+
         // Safety fallback if mediaType is missing
         if (!mediaType) {
             if (file.type.includes('image')) mediaType = 'image';
@@ -165,13 +223,30 @@ export default function JournalPage() {
         }
 
         setSavingMedia(true);
+        setMediaProgress(10);
         setSavedAt('Uploading media...');
+        let timer;
         try {
             const base64data = await api.fileToBase64(file);
+            setMediaProgress(30);
+
+            timer = setInterval(() => {
+                setMediaProgress(prev => {
+                    const remaining = 100 - prev;
+                    const increment = Math.max(0.1, remaining * 0.05);
+                    const next = prev + increment;
+                    return next >= 99 ? 99 : next;
+                });
+            }, 500);
+
             const res = await api.uploadMedia({
                 base64data, filename: file.name, mime_type: file.type,
                 media_type: mediaType, uploaded_from: 'journal', source_id: active.entry_id,
             });
+            
+            clearInterval(timer);
+            setMediaProgress(100);
+
             const newItem = { media_id: res.media_id, drive_link: res.drive_link, thumbnail_link: res.thumbnail_link, filename: file.name, display_name: file.name };
             
             const refKey = mediaType === 'image' ? 'image_refs' : mediaType === 'audio' ? 'audio_refs' : 'file_refs';
@@ -185,12 +260,18 @@ export default function JournalPage() {
                     [...m[mediaType === 'image' ? 'images' : mediaType === 'audio' ? 'audio' : 'files'], newItem]
             }));
             setSavedAt('Media uploaded');
+            
+            setTimeout(() => {
+                setSavingMedia(false);
+                setMediaProgress(0);
+            }, 800);
         } catch (e) {
+            clearInterval(timer);
+            setSavingMedia(false);
+            setMediaProgress(0);
             console.error('Upload Error:', e);
             alert(`Media upload failed: ${e.message}. Did you re-deploy the Apps Script?`);
             setSavedAt('Upload failed');
-        } finally {
-            setSavingMedia(false);
         }
     };
 
@@ -270,6 +351,28 @@ export default function JournalPage() {
                     </div>
 
                     {/* New entry is handled via Calendar selection, button removed to declutter */}
+                    
+                    {entries.length === 0 && !loading && (
+                        <div className="migration-card" style={{ margin: '1rem', padding: '1rem', background: 'rgba(255,165,0,0.1)', border: '1px solid #ffa500', borderRadius: '12px' }}>
+                            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#ffa500', fontWeight: 'bold' }}>
+                                Found 0 entries. Migrate from Google Sheets?
+                            </p>
+                            <button 
+                                className="btn btn-sm" 
+                                onClick={handleMigrateJournal}
+                                disabled={isMigrating}
+                                style={{ background: '#ffa500', color: '#fff', width: '100%' }}
+                            >
+                                {isMigrating ? 'Migrating...' : '🚀 Migrate Now'}
+                            </button>
+                        </div>
+                    )}
+
+                    {isMigrating && (
+                        <div className="migration-status-banner" style={{ margin: '0 1rem 1rem 1rem', fontSize: '0.8rem' }}>
+                            <span>🔄 {migrationStatus}</span>
+                        </div>
+                    )}
 
                     <div className="journal-sidebar-content">
                         {viewMode === 'list' ? (
@@ -443,6 +546,21 @@ export default function JournalPage() {
                                 onRecord={f => uploadMedia(f, 'audio')}
                                 onRemove={handleRemoveMedia}
                             />
+
+                            {savingMedia && (
+                                <div className="progress-container" style={{ marginTop: '1.5rem' }}>
+                                    <div className="progress-header">
+                                        <div className="progress-label">
+                                            <span className="spinner-mini" style={{ width: 14, height: 14, borderWidth: 2 }}></span>
+                                            Uploading media...
+                                        </div>
+                                        <div className="progress-value">{Math.round(mediaProgress)}%</div>
+                                    </div>
+                                    <div className="progress-track">
+                                        <div className="progress-fill" style={{ width: `${mediaProgress}%` }}></div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

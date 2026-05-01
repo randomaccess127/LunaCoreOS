@@ -19,6 +19,9 @@ export default function StudyNotesSidebar({
     onDeleteFolder,
     onNewNote,
     noteCounts,
+    isMigrating,
+    migrationStatus,
+    onMigrate,
 }) {
     const [creatingFolder, setCreatingFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -151,6 +154,20 @@ export default function StudyNotesSidebar({
 
             {/* BOTTOM PANEL */}
             <div className="sn-sidebar-bottom">
+                {(folders.length === 0 && notes.length === 0 && !isMigrating) && (
+                    <div 
+                        className="sn-new-note-text-btn migration-mode" 
+                        onClick={onMigrate}
+                        style={{ background: 'rgba(255,165,0,0.1)', color: '#ffa500', marginBottom: '8px', border: '1px solid #ffa500' }}
+                    >
+                        🚀 Migrate from Sheets
+                    </div>
+                )}
+                {isMigrating && (
+                    <div className="sn-migration-status" style={{ fontSize: '0.75rem', color: 'var(--accent)', padding: '8px 16px', textAlign: 'center' }}>
+                        🔄 {migrationStatus}
+                    </div>
+                )}
                 <div className="sn-new-note-text-btn" onClick={onNewNote}>
                     + New Note
                 </div>
