@@ -5,14 +5,17 @@ import { Disc, Settings, Play, Pause, SkipForward } from 'lucide-react';
 
 const TABS = [
     { id: 'dashboard', icon: '🌸', label: 'Dashboard' },
+    { id: 'studynotes', icon: '📝', label: 'Study Notes' },
+    { id: 'writing', icon: '✍️', label: 'Writing' },
+    { id: 'bookmarks', icon: '❤️', label: 'Bookmarks' },
     { id: 'journal', icon: '📖', label: 'Journal' },
+    { id: 'vault', icon: '💎', label: 'Vault', isRed: true },
+    { id: 'musicplayer', icon: '🎵', label: 'Music Player' },
+    { id: 'videos', icon: '🎬', label: 'Videos' },
+    { id: 'media', icon: '🎨', label: 'Media Library' },
     { id: 'todos', icon: '🎯', label: 'Todos' },
     { id: 'insights', icon: '✨', label: 'Insights' },
     { id: 'habits', icon: '💕', label: 'Habits' },
-    { id: 'videos', icon: '🎬', label: 'Videos' },
-    { id: 'media', icon: '🎨', label: 'Media Library' },
-    { id: 'musicplayer', icon: '🎵', label: 'Music Player' },
-    { id: 'vault', icon: '💎', label: 'Vault' },
     { id: 'lifemap', icon: '🧭', label: 'Life Map' },
     { id: 'timecapsule', icon: '📦', label: 'Time Capsule' },
     { id: 'whoami', icon: '🌙', label: 'Who Am I' },
@@ -21,9 +24,6 @@ const TABS = [
     { id: 'readinglist', icon: '📚', label: 'Reading List' },
     { id: 'watchlist', icon: '🎞️', label: 'Watchlist' },
     { id: 'finance', icon: '💳', label: 'Finance' },
-    { id: 'bookmarks', icon: '❤️', label: 'Bookmarks' },
-    { id: 'writing', icon: '✍️', label: 'Writing' },
-    { id: 'studynotes', icon: '📝', label: 'Study Notes' },
     { id: 'yearlyreview', icon: '🎆', label: 'Yearly Review' },
     { id: 'twitch', icon: '🎮', label: 'Twitch' },
     { id: 'delegation', icon: '🤝', label: 'Delegation' },
@@ -93,7 +93,7 @@ export default function Sidebar({ active, onNavigate, userName, isOffline, onPre
                         onKeyDown={e => e.key === 'Enter' && onNavigate(tab.id)}
                     >
                         <span className="nav-icon">{tab.icon}</span>
-                        <span className="nav-label">{tab.label}</span>
+                        <span className={`nav-label ${tab.isRed ? 'text-red' : ''}`}>{tab.label}</span>
                     </div>
                 ))}
                 <div style={{ height: '2rem', flexShrink: 0 }} />

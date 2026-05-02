@@ -120,7 +120,7 @@ CREATE TABLE finance (
 );
 
 CREATE TABLE bookmarks (
-  "id" TEXT PRIMARY KEY, "url" TEXT, "title" TEXT, "description" TEXT, "tags" TEXT, "favicon" TEXT, "created_at" TEXT, "is_read" TEXT, "updatedAt" TEXT
+  "id" TEXT PRIMARY KEY, "url" TEXT, "title" TEXT, "description" TEXT, "notes" TEXT, "tags" TEXT, "favicon" TEXT, "created_at" TEXT, "is_read" TEXT, "updatedAt" TEXT
 );
 
 CREATE TABLE writing (

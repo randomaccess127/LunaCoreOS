@@ -10,6 +10,12 @@ import './styles/mobile.css'
 import './styles/candy-theme.css'
 import './styles/scifi-sidebar.css'
 
+// ── Suppress expected Three.js deprecation warning from R3F ──
+const origWarn = console.warn;
+console.warn = (...args) => {
+    if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('THREE.Clock: This module has been deprecated')) return;
+    origWarn(...args);
+};
 
 // ── Service Worker Registration ────────────────────────────────
 if ('serviceWorker' in navigator) {

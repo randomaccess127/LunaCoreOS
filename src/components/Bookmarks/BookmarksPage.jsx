@@ -11,6 +11,7 @@ export default function BookmarksPage() {
     const [delegateDueDate, setDelegateDueDate] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [editingId, setEditingId] = useState(null);
 
     useEffect(() => {
         loadBookmarks();
@@ -33,33 +34,57 @@ export default function BookmarksPage() {
 
         const normalise = (u) => (u || '').trim().replace(/\/+$/, '').toLowerCase();
         const incomingUrl = normalise(formData.url);
-        if (bookmarks.some(b => normalise(b.url) === incomingUrl)) {
+        
+        // Only check for duplicates if we are NOT editing
+        if (!editingId && bookmarks.some(b => normalise(b.url) === incomingUrl)) {
             setError('This URL is already in your bookmarks.');
             return;
         }
 
-        const newBookmark = {
-            id: Date.now().toString(),
+        const bookmarkData = {
+            id: editingId || Date.now().toString(),
             ...formData,
-            created_at: new Date().toISOString()
+            notes: formData.note,
+            description: formData.note,
+            created_at: editingId ? (bookmarks.find(b => b.id === editingId)?.created_at || new Date().toISOString()) : new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
+
+        delete bookmarkData.note;
 
         setSaving(true);
         setError('');
         try {
-            await api.saveBookmark(newBookmark);
-            setBookmarks([newBookmark, ...bookmarks]);
-            if (delegateBookmark) {
-                await api.saveDelegationItem({
-                    title: formData.title || formData.url,
-                    source: 'Bookmark',
-                    link: formData.url,
-                    category: 'Reading',
-                    importance: 'High',
-                    due_date: delegateDueDate || ''
-                });
+            await api.saveBookmark(bookmarkData);
+        } catch (err) {
+            console.warn('Primary save failed, trying fallback:', err);
+            if (err.message?.includes("column 'notes' does not exist") || err.message?.includes("schema cache")) {
+                const fallback = { ...bookmarkData };
+                delete fallback.notes;
+                await api.saveBookmark(fallback);
+            } else {
+                throw err;
+            }
+        }
+
+        try {
+            if (editingId) {
+                setBookmarks(bookmarks.map(b => b.id === editingId ? bookmarkData : b));
+            } else {
+                setBookmarks([bookmarkData, ...bookmarks]);
+                if (delegateBookmark) {
+                    await api.saveDelegationItem({
+                        title: formData.title || formData.url,
+                        source: 'Bookmark',
+                        link: formData.url,
+                        category: 'Reading',
+                        importance: 'High',
+                        due_date: delegateDueDate || ''
+                    });
+                }
             }
             setShowAdd(false);
+            setEditingId(null);
             setFormData({ title: '', url: '', tags: '', note: '' });
             setDelegateBookmark(false);
             setDelegateDueDate('');
@@ -69,6 +94,17 @@ export default function BookmarksPage() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleEdit = (bookmark) => {
+        setFormData({
+            title: bookmark.title || '',
+            url: bookmark.url || '',
+            tags: bookmark.tags || '',
+            note: bookmark.notes || bookmark.note || bookmark.description || ''
+        });
+        setEditingId(bookmark.id);
+        setShowAdd(true);
     };
 
     const handleDelete = async (bookmarkId, e) => {
@@ -182,6 +218,36 @@ export default function BookmarksPage() {
                                 }
                             }} title="Delete bookmark">✕</button>
 
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(b); }} style={{
+                                position: 'absolute',
+                                top: '0.75rem',
+                                right: '3rem',
+                                background: 'rgba(162, 155, 254, 0.1)',
+                                border: '1px solid rgba(162, 155, 254, 0.3)',
+                                color: '#a29bfe',
+                                width: window.innerWidth <= 768 ? '40px' : '32px',
+                                height: window.innerWidth <= 768 ? '40px' : '32px',
+                                borderRadius: '50%',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.9rem',
+                                transition: 'all 0.2s',
+                                opacity: window.innerWidth <= 768 ? 0.8 : 0.4,
+                                zIndex: 10
+                            }} onMouseEnter={e => {
+                                if (window.innerWidth > 768) {
+                                    e.target.style.opacity = '1';
+                                    e.target.style.background = 'rgba(162, 155, 254, 0.2)';
+                                }
+                            }} onMouseLeave={e => {
+                                if (window.innerWidth > 768) {
+                                    e.target.style.opacity = '0.4';
+                                    e.target.style.background = 'rgba(162, 155, 254, 0.1)';
+                                }
+                            }} title="Edit bookmark">✎</button>
+
                             <a href={b.url} target="_blank" rel="noopener noreferrer" style={{
                                 textDecoration: 'none',
                                 color: 'inherit',
@@ -199,9 +265,9 @@ export default function BookmarksPage() {
                                     </div>
                                 </div>
 
-                                {b.note && (
+                                {(b.notes || b.note) && (
                                     <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                        {b.note}
+                                        {b.notes || b.note}
                                     </p>
                                 )}
 
@@ -224,8 +290,8 @@ export default function BookmarksPage() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
                     <div style={{ background: 'var(--card-bg)', padding: '2rem', borderRadius: '24px', width: '450px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h2 style={{ margin: 0 }}>Save Bookmark</h2>
-                            <button onClick={() => { setShowAdd(false); setError(''); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+                            <h2 style={{ margin: 0 }}>{editingId ? 'Edit Bookmark' : 'Save Bookmark'}</h2>
+                            <button onClick={() => { setShowAdd(false); setEditingId(null); setError(''); setFormData({ title: '', url: '', tags: '', note: '' }); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
                         </div>
                         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                             <input
@@ -281,9 +347,9 @@ export default function BookmarksPage() {
                                 </p>
                             )}
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button type="button" onClick={() => { setShowAdd(false); setError(''); }} style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>Cancel</button>
+                                <button type="button" onClick={() => { setShowAdd(false); setEditingId(null); setError(''); setFormData({ title: '', url: '', tags: '', note: '' }); }} style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>Cancel</button>
                                 <button type="submit" disabled={saving} style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', background: 'var(--brand-color, #a29bfe)', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
-                                    {saving ? 'Saving...' : 'Save Bookmark'}
+                                    {saving ? 'Saving...' : (editingId ? 'Update Bookmark' : 'Save Bookmark')}
                                 </button>
                             </div>
                         </form>

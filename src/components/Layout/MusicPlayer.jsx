@@ -303,7 +303,7 @@ export default function MusicPlayer() {
             <audio ref={audioRef} playsInline />
             <div ref={ytDivRef} style={{ position: 'fixed', left: '-9999px', bottom: 0, width: '1px', height: '1px', pointerEvents: 'none' }} />
 
-            {showModal && (
+            <div style={{ display: showModal ? 'block' : 'none' }}>
                 <>
                     <div className="music-modal-overlay" onClick={closeModal} />
                     <div className="music-modal">
@@ -405,7 +405,7 @@ export default function MusicPlayer() {
                         </div>
                     </div>
                 </>
-            )}
+            </div>
         </div>
     );
 }

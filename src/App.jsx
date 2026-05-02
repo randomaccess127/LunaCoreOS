@@ -32,6 +32,7 @@ import OfflineCacheBadge from './components/OfflineCacheBadge';
 import { supabase } from './services/supabaseClient';
 import { loginWithSupabase } from './services/googleAuth';
 import Dither from './components/Shared/Dither';
+import { Eye, Lock } from 'lucide-react';
 
 export default function App() {
     const [tab, setTab] = useState(() => localStorage.getItem('luna_active_tab') || 'journal');
@@ -42,6 +43,7 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
+    const [authError, setAuthError] = useState('');
     
     // Curated Lock Screen Dither Colors (Sophisticated, non-party vibes)
     const [lockScreenColor] = useState(() => {
@@ -201,39 +203,20 @@ export default function App() {
         }
     };
 
-    if (authLoading) {
-        return (
-            <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
-                <Dither 
-                waveColor={[0.5, 0.5, 0.5]}
-                disableAnimation={false}
-                enableMouseInteraction
-                mouseRadius={0.3}
-                colorNum={4.3}
-                waveAmplitude={0.3}
-                waveFrequency={3}
-                waveSpeed={0.05}
-            />
-                <div className="loader" style={{ border: '3px solid #1a1a1a', borderTop: '3px solid #f97316', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', position: 'relative', zIndex: 1 }}></div>
-                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-            </div>
-        );
-    }
+    const renderContent = () => {
+        if (authLoading) {
+            return (
+                <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent' }}>
+                    <div className="loader" style={{ border: '3px solid #1a1a1a', borderTop: '3px solid #f97316', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', position: 'relative', zIndex: 1 }}></div>
+                    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                </div>
+            );
+        }
 
-    if (!user) {
-        return (
-            <div className="vault-theme">
-                <Dither 
-                waveColor={lockScreenColor}
-                disableAnimation={false}
-                enableMouseInteraction
-                mouseRadius={0.3}
-                colorNum={4.3}
-                waveAmplitude={0.3}
-                waveFrequency={3}
-                waveSpeed={0.05}
-            />
-                <div className="vault-container">
+        if (!user) {
+            return (
+                <div className="vault-theme">
+                    <div className="vault-container">
                     <div className="vault-icon">
                         <div className="pulse-ring"></div>
                         <div style={{ fontSize: '6rem', position: 'relative', zIndex: 2 }}>🌘</div>
@@ -248,7 +231,8 @@ export default function App() {
                         
                         try {
                             loginBtn.disabled = true;
-                            loginBtn.innerText = 'Unlocking...';
+                            loginBtn.innerText = 'Decrypting...';
+                            setAuthError('');
 
                             // ── Set flag BEFORE auth call to prevent race condition ──
                             // onAuthStateChange fires instantly on SIGNED_IN,
@@ -263,22 +247,23 @@ export default function App() {
                             if (error) {
                                 // Auth failed — remove the flag we pre-set
                                 sessionStorage.removeItem('luna_vault_unlocked');
-                                alert('Invalid Master Key. Access Denied.');
+                                setAuthError('Invalid Master Key. Access Denied.');
                                 loginBtn.disabled = false;
-                                loginBtn.innerText = 'Unlock Sanctuary';
+                                loginBtn.innerText = 'DECRYPT';
                             }
                             // On success: onAuthStateChange fires, sees flag = true, unlocks ✅
                         } catch (err) {
                             console.error('Vault login failed:', err);
+                            setAuthError('Decryption process failed. Please try again.');
                             loginBtn.disabled = false;
-                            loginBtn.innerText = 'Unlock Sanctuary';
+                            loginBtn.innerText = 'DECRYPT';
                         }
                     }} className="vault-form">
                         <div className="input-wrapper">
                             <input 
                                 type={showPassword ? "text" : "password"} 
                                 name="password" 
-                                placeholder={showPassword ? "Master Key" : "••••••••"} 
+                                placeholder="" 
                                 autoFocus 
                                 required 
                                 style={{ letterSpacing: showPassword ? '0.1rem' : '0.5rem' }}
@@ -287,13 +272,15 @@ export default function App() {
                                 type="button" 
                                 className="toggle-password"
                                 onClick={() => setShowPassword(!showPassword)}
+                                style={{ color: `rgb(${Math.round(lockScreenColor[0]*255)}, ${Math.round(lockScreenColor[1]*255)}, ${Math.round(lockScreenColor[2]*255)})` }}
                             >
-                                {showPassword ? '🔒' : '👁️'}
+                                {showPassword ? <Lock size={20} /> : <Eye size={20} />}
                             </button>
                             <div className="input-glow"></div>
                         </div>
+                        {authError && <div style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1.2rem', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{authError}</div>}
                         <button type="submit" className="vault-button">
-                            Unlock Sanctuary
+                            DECRYPT
                         </button>
                     </form>
                     
@@ -374,6 +361,9 @@ export default function App() {
                         transition: all 0.3s;
                         outline: none;
                     }
+                    .vault-form input::placeholder {
+                        letter-spacing: 0.1rem !important;
+                    }
                     .vault-form input:focus {
                         border-color: #f97316;
                         background: rgba(255, 255, 255, 0.07);
@@ -425,33 +415,42 @@ export default function App() {
                         text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
                     }
                 ` }} />
-            </div>
+                </div>
+            );
+        }
+
+        return (
+            <>
+                <AppShell 
+                    activeTab={tab} 
+                    onNavigate={navigate} 
+                    userName={userName} 
+                    isOffline={isOffline} 
+                    preload={preload}
+                    onPreload={triggerPreload}
+                >
+                    {renderTab()}
+                </AppShell>
+                <OfflineCacheBadge />
+            </>
         );
-    }
+    };
 
     return (
         <>
-            <Dither 
-                waveColor={lockScreenColor}
-                disableAnimation={false}
-                enableMouseInteraction={true}
-                mouseRadius={0.3}
-                colorNum={4.3}
-                waveAmplitude={0.3}
-                waveFrequency={3}
-                waveSpeed={0.05}
-            />
-            <AppShell 
-                activeTab={tab} 
-                onNavigate={navigate} 
-                userName={userName} 
-                isOffline={isOffline} 
-                preload={preload}
-                onPreload={triggerPreload}
-            >
-                {renderTab()}
-            </AppShell>
-            <OfflineCacheBadge />
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1, pointerEvents: 'none' }}>
+                <Dither 
+                    waveColor={lockScreenColor}
+                    disableAnimation={false}
+                    enableMouseInteraction={true}
+                    mouseRadius={0.3}
+                    colorNum={4.3}
+                    waveAmplitude={0.3}
+                    waveFrequency={3}
+                    waveSpeed={0.05}
+                />
+            </div>
+            {renderContent()}
         </>
     );
 }

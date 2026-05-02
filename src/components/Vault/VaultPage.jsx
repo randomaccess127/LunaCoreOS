@@ -191,14 +191,13 @@ function VaultPage() {
 
     return (
         <div className="vault-layout" style={{ 
-            display: 'flex', height: '100vh', width: '100%', background: '#0a0a0f', color: 'white',
-            backgroundImage: 'radial-gradient(circle at 0% 0%, rgba(167,139,250,0.05) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(124,58,237,0.05) 0%, transparent 50%)',
+            display: 'flex', height: '100vh', width: '100%', background: 'transparent', color: 'white',
             overflow: 'hidden',
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0
         }}>
             <style>{`
                 .vault-sidebar {
-                    width: 280px; background: rgba(15, 15, 25, 0.7);
+                    width: 280px; background: rgba(15, 15, 25, 0.5);
                     backdrop-filter: blur(30px); border-right: 1px solid rgba(255,255,255,0.08);
                     display: flex; flex-direction: column; padding: 1.5rem;
                     flex-shrink: 0; height: 100%;

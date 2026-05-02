@@ -19,15 +19,23 @@
 /* Fix content-area padding fighting full-height layout */
 .content-area:has(.sn-page) {
   padding: 0 !important;
-  background: transparent !important;
   overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.content-area:has(.sn-page) > div {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
 }
 
 /* ── Theme Tokens ─────────────────────────────────────────────── */
 :root {
-  --sn-bg: rgba(3, 5, 10, 0.1);
-  --sn-sidebar-bg: rgba(6, 11, 25, 0.2);
-  --sn-surface-alt: rgba(255, 255, 255, 0.05);
+  --sn-bg: #0f0e17;
+  --sn-sidebar-bg: #13121f;
+  --sn-surface-alt: #0d0c18;
   --sn-surface-hover: #1a1828;
   --sn-border: #1e1c30;
   --sn-border-light: #2a2840;
@@ -35,18 +43,17 @@
   --sn-accent-purple: #8b5cf6;
   --sn-text: #e8e6f8;
   --sn-text-bright: #f0eeff;
-  --sn-text-muted: #d1d1d1;
-  --sn-text-hint: #a0a0a0;
-  --sn-text-folder: #ffffff;
-  --sn-text-mention: #c084fc;
+  --sn-text-muted: #6b6882;
+  --sn-text-hint: #3d3a5c;
+  --sn-text-folder: #c8c5e8;
+  --sn-text-mention: #a78bfa;
 }
 
 /* ── Main Layout ─────────────────────────────────────────────── */
 .sn-page {
   display: flex;
   height: 100%;
-  background: transparent !important;
-  backdrop-filter: blur(40px);
+  background: transparent;
   color: var(--sn-text);
   overflow: hidden;
 }
@@ -58,7 +65,7 @@
   height: 100%;
   color: var(--sn-text-muted);
   font-size: 14px;
-  background: transparent !important;
+  background: transparent;
 }
 
 /* ── Left Sidebar (280px) ────────────────────────────────────── */
@@ -66,8 +73,8 @@
   width: 280px;
   min-width: 280px;
   height: 100%;
-  background: rgba(6, 11, 25, 0.6) !important;
-  backdrop-filter: blur(80px);
+  background: rgba(19, 18, 31, 0.5);
+  backdrop-filter: blur(20px);
   border-right: 1px solid var(--sn-border);
   display: flex;
   flex-direction: column;
@@ -278,7 +285,7 @@
   box-sizing: border-box;
 }
 .sn-note-card:hover {
-  background: rgba(22, 20, 37, 0.4);
+  background: #161425;
 }
 .sn-note-card.active {
   background: var(--sn-surface-hover);
@@ -349,7 +356,7 @@
 .sn-editor-panel {
   flex: 1;
   height: 100%;
-  background: transparent !important;
+  background: transparent;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -403,6 +410,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
+  max-height: 100%;
 }
 
 /* 1. Title Row (60px) */
@@ -514,6 +523,7 @@
   padding: 36px 48px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 .sn-editor-writing-area::-webkit-scrollbar {
   width: 5px;
@@ -754,7 +764,7 @@
 
 /* ── Custom Select ───────────────────────────────────────────── */
 .sn-custom-select-dark {
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   border: none;
   color: var(--sn-text-muted);
   font-size: 13px;
@@ -765,7 +775,7 @@
   border-radius: 4px;
 }
 .sn-custom-select-dark option {
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   color: var(--sn-text);
   padding: 6px 8px;
 }
@@ -782,7 +792,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(10, 9, 23, 0.5);
+  background: #0a0917;
   border: 1px solid var(--sn-border);
   border-bottom: none;
   border-radius: 8px 8px 0 0;
@@ -801,7 +811,7 @@
 }
 
 .sn-code-lang-select option {
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   color: var(--sn-text);
 }
 
@@ -841,7 +851,7 @@
 }
 
 .sn-editor-toolbar-row select.sn-custom-select-dark option {
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   color: var(--sn-text);
 }
 
@@ -921,7 +931,7 @@
   top: calc(100% + 4px);
   left: 0;
   min-width: 120px;
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   border: 1px solid var(--sn-border);
   border-radius: 6px;
   padding: 4px 0;
@@ -946,7 +956,7 @@
 /* ── Mention Popup ───────────────────────────────────────────── */
 .sn-mention-popup-refined {
   z-index: 500;
-  background: rgba(19, 18, 31, 0.4);
+  background: #13121f;
   border: 1px solid var(--sn-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -1024,7 +1034,7 @@
 }
 
 .ProseMirror pre {
-  background: rgba(13, 12, 24, 0.8);
+  background: #0d0c18;
   border: 1px solid var(--sn-border);
   border-radius: 8px;
   padding: 16px;

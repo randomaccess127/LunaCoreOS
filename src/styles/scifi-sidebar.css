@@ -151,6 +151,18 @@
     text-shadow: 0 0 8px rgba(0, 255, 213, 0.6);
 }
 
+.scifi-sidebar .nav-label.text-red {
+    color: #ef4444 !important;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.6) !important;
+    font-weight: 700 !important;
+}
+
+.scifi-sidebar .nav-item:hover .nav-label.text-red,
+.scifi-sidebar .nav-item.active .nav-label.text-red {
+    color: #ff6b6b !important;
+    text-shadow: 0 0 12px rgba(239, 68, 68, 0.8) !important;
+}
+
 .scifi-sidebar .nav-icon {
     filter: sepia(1) hue-rotate(130deg) saturate(300%) brightness(1.2);
     font-size: 0.9rem !important;
