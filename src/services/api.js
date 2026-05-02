@@ -287,14 +287,13 @@ export const uploadToSupabase = async (fileOrBlob, bucket = 'study-notes') => {
 
 // ─── Media ───────────────────────────────────────────────────────────────────
 export const uploadMedia = async (params) => {
-    // Intercept Study Notes uploads and push to the new Drive folder
     // Support either raw File object or base64 fallback
     const fileSource = params.file || params.base64data;
     
     if (fileSource) {
         try {
-            // For Study Notes, we now prefer Supabase Storage (Faster, No Quota Issues)
-            const bucket = 'study-notes';
+            // Use different buckets based on upload source
+            const bucket = params.uploaded_from === 'media_library' ? 'media-library' : 'study-notes';
             const { id, url } = await uploadToSupabase(fileSource, bucket);
             
             params.drive_file_id = id; // Store the path as ID
@@ -369,8 +368,29 @@ export const updateMediaRefs = async (params) => {
 };
 
 export const deleteMedia = async (media_id) => {
-    const { error } = await supabase.from('media').delete().eq('media_id', media_id);
-    if (error) throw error;
+    try {
+        // First, fetch the media to get the file path and determine which bucket
+        const { data: media, error: fetchErr } = await supabase.from('media').select('*').eq('media_id', media_id).single();
+        
+        if (!fetchErr && media && media.drive_file_id) {
+            try {
+                // Determine which bucket based on media source
+                const bucket = media.uploaded_from === 'media_library' ? 'media-library' : 'study-notes';
+                // Try to delete from Supabase bucket
+                await supabase.storage.from(bucket).remove([media.drive_file_id]);
+            } catch (storageErr) {
+                console.warn('Could not delete from Supabase bucket:', storageErr);
+                // Continue with DB deletion even if storage deletion fails
+            }
+        }
+        
+        // Delete the database record
+        const { error } = await supabase.from('media').delete().eq('media_id', media_id);
+        if (error) throw error;
+    } catch (err) {
+        console.error('Delete media error:', err);
+        throw err;
+    }
 };
 
 export const scanOrphans = async () => {
