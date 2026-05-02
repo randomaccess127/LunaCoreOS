@@ -119,16 +119,32 @@ export function AudioProvider({ children }) {
             return;
         }
 
-        audioRef.current.pause();
-        setCurrentTrack(track);
+        const playbackId = Date.now();
+        audioRef.current._lastPlaybackId = playbackId;
+
         try {
             const streamUrl = await api.getMusicBytes(track.drive_file_id);
+            
+            // ── Check if we've been superseded ──
+            if (audioRef.current._lastPlaybackId !== playbackId) return;
+
+            audioRef.current.pause();
             audioRef.current.src = streamUrl;
             audioRef.current.load();
+            
             if (track.last_played_time > 0 && (track.file_size_mb || 0) > 30) {
                 audioRef.current.currentTime = track.last_played_time;
             }
-            await audioRef.current.play();
+            
+            // ── Execute Play safely ──
+            const p = audioRef.current.play();
+            if (p !== undefined) {
+                p.catch(e => {
+                    if (e.name !== 'AbortError') console.warn('[Audio] Playback error:', e);
+                });
+            }
+            
+            setCurrentTrack(track);
         } catch (err) {
             console.error('Global Playback failed', err);
         }

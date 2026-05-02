@@ -14,17 +14,43 @@ let accessToken = null;
 let pendingResolvers = []; // queue of waiters while a single popup is open
 let popupOpen = false;
 
+let cachedToken = null;
+let tokenExpiry = null;
+
+export const getDriveToken = async () => {
+    // 1. Return cached token if still valid (with 60s buffer)
+    if (cachedToken && tokenExpiry && Date.now() < tokenExpiry - 60000) {
+        return cachedToken;
+    }
+
+    try {
+        // 2. Call the secure Supabase Edge Function (The Key stays hidden in the backend!)
+        const { data, error } = await supabase.functions.invoke('drive-auth');
+
+        if (error || !data?.access_token) {
+            console.warn('[Auth] Edge Function auth failed, falling back to cached session:', error?.message);
+            throw new Error('Edge Function failed');
+        }
+
+        cachedToken = data.access_token;
+        tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+        console.log('[Auth] Secure Drive token acquired via Edge Function.');
+        return cachedToken;
+    } catch (err) {
+        // If Edge Function isn't deployed yet or fails, we return null to trigger fallbacks
+        return null;
+    }
+};
+
 // ── Persistence ───────────────────────────────────────────────
 function loadCachedToken() {
     const cached = localStorage.getItem(TOKEN_KEY);
     const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
     if (cached && Date.now() < expiry) {
         accessToken = cached;
-        startBackgroundRefresh(); // Ensure heartbeat is running if we have a token
+        startBackgroundRefresh();
         return true;
     }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_EXPIRY_KEY);
     accessToken = null;
     return false;
 }
@@ -38,6 +64,7 @@ function saveToken(token) {
 
 export const clearDriveToken = () => {
     accessToken = null;
+    cachedToken = null;
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_EXPIRY_KEY);
     if (refreshInterval) clearInterval(refreshInterval);
@@ -124,12 +151,17 @@ const gsiReady = new Promise((resolve) => {
 export const initGoogleAuth = () => gsiReady;
 
 // ── Token Request ─────────────────────────────────────────────
-// Only ONE popup can be open at a time. All concurrent callers
-// queue up and share the same popup result.
-// queue up and share the same popup result.
 export const requestDriveAccess = async (isSilent = false) => {
-    // 1. Fast path: valid in-memory token
-    if (accessToken) return accessToken;
+    // 0. NEW: SECURE EDGE FUNCTION PATH (Priority)
+    const secureToken = await getDriveToken();
+    if (secureToken) return secureToken;
+
+    // 1. Fast path: check if we have a valid in-memory token
+    if (accessToken) {
+        const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+        if (Date.now() < expiry) return accessToken;
+        accessToken = null;
+    }
 
     // 2. Second chance: restore from localStorage cache
     if (loadCachedToken()) return accessToken;
@@ -155,42 +187,25 @@ export const requestDriveAccess = async (isSilent = false) => {
         }
     }
 
-    // If silent mode is requested and all background methods failed, stop here
     if (isSilent) throw new Error('Silent refresh not possible');
 
     // 5. Final Fallback: GSI Popup
     await gsiReady; 
-
-    // Safety: If an auth request takes more than 45s, reset everything
-    const authTimeout = setTimeout(() => {
-        if (popupOpen) {
-            console.warn('[Auth] Authentication timed out. Resetting state.');
-            popupOpen = false;
-            pendingResolvers.forEach(([, reject]) => reject(new Error('Authentication timed out. Please try again.')));
-            pendingResolvers = [];
-        }
-    }, 45000);
-
+    
     if (popupOpen) {
         return new Promise((resolve, reject) => {
-            pendingResolvers.push([
-                (token) => { clearTimeout(authTimeout); resolve(token); },
-                (err) => { clearTimeout(authTimeout); reject(err); }
-            ]);
+            pendingResolvers.push([resolve, reject]);
         });
     }
 
     popupOpen = true;
     return new Promise((resolve, reject) => {
-        pendingResolvers.push([
-            (token) => { clearTimeout(authTimeout); resolve(token); },
-            (err) => { clearTimeout(authTimeout); reject(err); }
-        ]);
+        pendingResolvers.push([resolve, reject]);
         try {
             tokenClient.requestAccessToken({ prompt: '' });
         } catch (err) {
             popupOpen = false;
-            reject(new Error('Google Identity Services failed to initialize. Check your connection.'));
+            reject(new Error('Google Identity Services failed.'));
         }
     });
 };

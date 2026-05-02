@@ -258,10 +258,11 @@ export default function Videos() {
                         : `${sub} subs`) : '';
 
             const newCh = {
-                id: ch.id, title: ch.snipped?.title || ch.snippet.title,
-                thumbnail: ch.snippet.thumbnails?.default?.url,
-                uploadsId: ch.contentDetails.relatedPlaylists.uploads,
-                subs,
+                id: ch.id, 
+                title: ch.snippet?.title || 'Unknown',
+                thumbnail: ch.snippet?.thumbnails?.default?.url,
+                uploadsId: ch.contentDetails?.relatedPlaylists?.uploads,
+                subs: subs || '',
             };
 
             await api.saveYTChannel(newCh);

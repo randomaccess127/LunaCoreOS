@@ -192,7 +192,13 @@ CREATE TABLE music_folders (
 );
 
 CREATE TABLE yt_liked (
-  "video_id" TEXT PRIMARY KEY, "title" TEXT, "channel_title" TEXT, "thumbnail" TEXT, "liked_at" TEXT
+  "video_id" TEXT PRIMARY KEY, 
+  "title" TEXT, 
+  "channel_title" TEXT, 
+  "channel_id" TEXT,
+  "thumbnail" TEXT, 
+  "published_at" TEXT,
+  "liked_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE TABLE twitch_liked (
@@ -201,7 +207,12 @@ CREATE TABLE twitch_liked (
 
 DROP TABLE IF EXISTS yt_channels CASCADE;
 CREATE TABLE yt_channels (
-  "id" TEXT PRIMARY KEY, "channel_id" TEXT, "title" TEXT, "thumbnail" TEXT, "added_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  "id" TEXT PRIMARY KEY, 
+  "title" TEXT, 
+  "thumbnail" TEXT, 
+  "uploadsId" TEXT, 
+  "subs" TEXT,
+  "added_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 DROP TABLE IF EXISTS vault_likes CASCADE;

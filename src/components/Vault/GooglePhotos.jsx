@@ -304,7 +304,9 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
                 const cloudData = await getVaultIndex(fid);
                 if (cloudData) {
                     setFolderCache(c => ({ ...c, [fid]: cloudData }));
-                    localStorage.setItem(cacheKey, JSON.stringify(cloudData));
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify(cloudData));
+                    } catch (e) { console.warn("Local cache quota exceeded."); }
                 }
             } catch (e) { console.warn("Cloud sync failed:", e); }
         }
@@ -316,7 +318,9 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
             const nextBatch = currentData.allItems.slice(currentCount, currentCount + 50);
             const newData = { ...currentData, displayedItems: [...currentData.displayedItems, ...nextBatch] };
             setFolderCache(c => ({ ...c, [fid]: newData }));
-            localStorage.setItem(cacheKey, JSON.stringify(newData));
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(newData));
+            } catch (e) { console.warn("Local cache quota exceeded."); }
             saveVaultIndex(fid, newData).catch(() => {}); // Optimistic cloud update
             return;
         }
@@ -354,7 +358,9 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
 
             const newData = { allItems: formatted, displayedItems: formatted.slice(0, 50), nextToken: null };
             setFolderCache(c => ({ ...c, [fid]: newData }));
-            localStorage.setItem(cacheKey, JSON.stringify(newData));
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(newData));
+            } catch (e) { console.warn("Local cache quota exceeded."); }
             await saveVaultIndex(fid, newData);
         } catch (err) { console.error("Index deep sync failed:", err); }
         finally { setLoading(false); }

@@ -40,6 +40,7 @@ export default function App() {
     const [preload, setPreload] = useState({ active: false, current: 0, total: 0, status: '' });
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
+    const [showPassword, setShowPassword] = useState(false);
 
     const triggerPreload = () => {
         if (preload.active) return;
@@ -51,17 +52,41 @@ export default function App() {
 
     useEffect(() => {
         // Handle Supabase Auth Session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            setAuthLoading(false);
-        });
+        const initAuth = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                setUser(session?.user ?? null);
+            } catch (err) {
+                console.error('Auth session fetch failed:', err);
+            } finally {
+                setAuthLoading(false);
+            }
+        };
+
+        initAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            console.log(`[Auth Event] ${_event}`, session ? 'User present' : 'No user');
             setUser(session?.user ?? null);
             setAuthLoading(false);
         });
 
-        return () => subscription.unsubscribe();
+        // ── Session Heartbeat ──
+        // Supabase auto-refresh sometimes fails in suspended tabs.
+        // We explicitly pulse the session every 15 minutes to keep it alive.
+        const heartbeat = setInterval(async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                console.log('[Auth] Pulsing session heartbeat...');
+                const { error } = await supabase.auth.refreshSession();
+                if (error) console.warn('[Auth] Heartbeat refresh failed:', error);
+            }
+        }, 15 * 60 * 1000);
+
+        return () => {
+            subscription.unsubscribe();
+            clearInterval(heartbeat);
+        };
     }, []);
 
     useEffect(() => {
@@ -88,11 +113,11 @@ export default function App() {
     useEffect(() => {
         // Load config on mount
         api.getDashboardStats()
-            .then(data => {
-                if (data?.config?.user_name) setUserName(data.config.user_name);
-                if (data?.config?.theme) {
-                    setTheme(data.config.theme);
-                    document.documentElement.setAttribute('data-theme', data.config.theme);
+            .then(res => {
+                if (res?.data?.user_name) setUserName(res.data.user_name);
+                if (res?.data?.theme) {
+                    setTheme(res.data.theme);
+                    document.documentElement.setAttribute('data-theme', res.data.theme);
                 }
             })
             .catch(() => { });
@@ -145,26 +170,188 @@ export default function App() {
 
     if (!user) {
         return (
-            <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', backgroundImage: 'radial-gradient(circle at top right, #331100, transparent), radial-gradient(circle at bottom left, #110033, transparent)' }}>
-                <div style={{ background: 'rgba(20, 20, 20, 0.8)', padding: '3rem', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)', textAlign: 'center', maxWidth: '400px', width: '90%', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
-                    <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🌘</div>
-                    <h1 style={{ color: 'white', marginBottom: '0.5rem', fontSize: '2rem', fontWeight: '700' }}>Luna Diary</h1>
-                    <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '2.5rem' }}>Welcome back. Sign in to your private workspace to continue.</p>
+            <div className="vault-theme">
+                <div className="vault-container">
+                    <div className="vault-icon">
+                        <div className="pulse-ring"></div>
+                        <div style={{ fontSize: '3rem', position: 'relative', zIndex: 2 }}>🌘</div>
+                    </div>
+                    <h1>Luna Sanctuary</h1>
+                    <p>Enter your Master Key to unlock your private space.</p>
                     
-                    <button 
-                        onClick={loginWithSupabase}
-                        style={{ background: '#f97316', color: 'white', border: 'none', padding: '1rem 2rem', borderRadius: '12px', fontSize: '1.1rem', fontWeight: '600', cursor: 'pointer', width: '100%', transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 20px rgba(249, 115, 22, 0.2)' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 15px 30px rgba(249, 115, 22, 0.3)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(249, 115, 22, 0.2)'; }}
-                    >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.908 3.152-1.928 4.176-1.288 1.288-3.312 2.696-6.892 2.696-5.572 0-10.04-4.508-10.04-10.12s4.468-10.12 10.04-10.12c3.036 0 5.256 1.196 6.872 2.736l2.308-2.308c-1.956-1.872-4.596-3.328-9.18-3.328-8.204 0-14.92 6.64-14.92 14.84s6.716 14.84 14.92 14.84c4.416 0 7.744-1.452 10.32-4.148 2.656-2.656 3.5-6.388 3.5-9.288 0-.88-.072-1.712-.204-2.48h-13.616z"/></svg>
-                        Sign in with Google
-                    </button>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        const pwd = e.target.password.value;
+                        const loginBtn = e.target.querySelector('.vault-button');
+                        
+                        try {
+                            loginBtn.disabled = true;
+                            loginBtn.innerText = 'Unlocking...';
+
+                            const { error } = await supabase.auth.signInWithPassword({
+                                email: 'randomaccess651@gmail.com',
+                                password: pwd
+                            });
+
+                            if (error) {
+                                alert('Invalid Master Key. Access Denied.');
+                                loginBtn.disabled = false;
+                                loginBtn.innerText = 'Unlock Sanctuary';
+                            }
+                        } catch (err) {
+                            console.error('Vault login failed:', err);
+                            loginBtn.disabled = false;
+                            loginBtn.innerText = 'Unlock Sanctuary';
+                        }
+                    }} className="vault-form">
+                        <div className="input-wrapper">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                name="password" 
+                                placeholder={showPassword ? "Master Key" : "••••••••"} 
+                                autoFocus 
+                                required 
+                                style={{ letterSpacing: showPassword ? '0.1rem' : '0.5rem' }}
+                            />
+                            <button 
+                                type="button" 
+                                className="toggle-password"
+                                onClick={() => setShowPassword(!showPassword)}
+                            >
+                                {showPassword ? '🔒' : '👁️'}
+                            </button>
+                            <div className="input-glow"></div>
+                        </div>
+                        <button type="submit" className="vault-button">
+                            Unlock Sanctuary
+                        </button>
+                    </form>
                     
-                    <div style={{ marginTop: '2rem', fontSize: '0.9rem', color: 'rgba(255,255,255,0.3)' }}>
-                        Encrypted & Private
+                    <div className="vault-footer">
+                        <span>Encrypted & Private</span>
                     </div>
                 </div>
+
+                <style dangerouslySetInnerHTML={{ __html: `
+                    .vault-theme {
+                        height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a0f 100%);
+                        color: #fff;
+                        font-family: 'Inter', sans-serif;
+                    }
+                    .vault-container {
+                        text-align: center;
+                        padding: 3rem;
+                        background: rgba(20, 20, 30, 0.6);
+                        backdrop-filter: blur(20px);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 2rem;
+                        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                        width: 100%;
+                        max-width: 400px;
+                    }
+                    .vault-icon {
+                        position: relative;
+                        width: 80px;
+                        height: 80px;
+                        margin: 0 auto 2rem;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .pulse-ring {
+                        position: absolute;
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        border-radius: 50%;
+                        background: #f97316;
+                        opacity: 0.2;
+                        animation: pulse 2s infinite;
+                    }
+                    @keyframes pulse {
+                        0% { transform: scale(1); opacity: 0.2; }
+                        100% { transform: scale(1.5); opacity: 0; }
+                    }
+                    .vault-container h1 {
+                        font-size: 2rem;
+                        margin-bottom: 0.5rem;
+                        background: linear-gradient(to right, #fff, #a5a5a5);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                    }
+                    .vault-container p {
+                        color: #888;
+                        font-size: 0.9rem;
+                        margin-bottom: 2.5rem;
+                    }
+                    .input-wrapper {
+                        position: relative;
+                        margin-bottom: 1.5rem;
+                    }
+                    .vault-form input {
+                        width: 100%;
+                        padding: 1.2rem;
+                        padding-right: 3.5rem;
+                        background: rgba(0, 0, 0, 0.3);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 1rem;
+                        color: #fff;
+                        font-size: 1.2rem;
+                        text-align: center;
+                        transition: all 0.3s;
+                        outline: none;
+                    }
+                    .vault-form input:focus {
+                        border-color: #f97316;
+                        box-shadow: 0 0 20px rgba(249, 115, 22, 0.2);
+                    }
+                    .toggle-password {
+                        position: absolute;
+                        right: 1rem;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        background: none;
+                        border: none;
+                        font-size: 1.2rem;
+                        cursor: pointer;
+                        opacity: 0.5;
+                        transition: opacity 0.3s;
+                        z-index: 3;
+                    }
+                    .toggle-password:hover {
+                        opacity: 1;
+                    }
+                    .vault-button {
+                        width: 100%;
+                        padding: 1.2rem;
+                        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+                        border: none;
+                        border-radius: 1rem;
+                        color: #fff;
+                        font-weight: 600;
+                        font-size: 1rem;
+                        cursor: pointer;
+                        transition: all 0.3s;
+                        box-shadow: 0 10px 15px -3px rgba(249, 115, 22, 0.3);
+                    }
+                    .vault-button:hover:not(:disabled) {
+                        transform: translateY(-2px);
+                        box-shadow: 0 20px 25px -5px rgba(249, 115, 22, 0.4);
+                    }
+                    .vault-button:disabled {
+                        opacity: 0.6;
+                        cursor: not-allowed;
+                    }
+                    .vault-footer {
+                        margin-top: 2.5rem;
+                        font-size: 0.75rem;
+                        color: #444;
+                        text-transform: uppercase;
+                        letter-spacing: 0.1rem;
+                    }
+                ` }} />
             </div>
         );
     }
