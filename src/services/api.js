@@ -292,8 +292,11 @@ export const uploadMedia = async (params) => {
     
     if (fileSource) {
         try {
-            // Use different buckets based on upload source
-            const bucket = params.uploaded_from === 'media_library' ? 'media-library' : 'study-notes';
+            // Route to appropriate bucket based on upload source
+            let bucket = 'study-notes'; // Default
+            if (params.uploaded_from === 'media_library') bucket = 'media-library';
+            else if (params.uploaded_from === 'journal') bucket = 'journal';
+            
             const { id, url } = await uploadToSupabase(fileSource, bucket);
             
             params.drive_file_id = id; // Store the path as ID
@@ -375,7 +378,10 @@ export const deleteMedia = async (media_id) => {
         if (!fetchErr && media && media.drive_file_id) {
             try {
                 // Determine which bucket based on media source
-                const bucket = media.uploaded_from === 'media_library' ? 'media-library' : 'study-notes';
+                let bucket = 'study-notes'; // Default
+                if (media.uploaded_from === 'media_library') bucket = 'media-library';
+                else if (media.uploaded_from === 'journal') bucket = 'journal';
+                
                 // Try to delete from Supabase bucket
                 await supabase.storage.from(bucket).remove([media.drive_file_id]);
             } catch (storageErr) {

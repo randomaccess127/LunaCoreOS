@@ -1,23 +1,67 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Heading } from '@tiptap/extension-heading';
+import TextAlign from '@tiptap/extension-text-align';
+import Blockquote from '@tiptap/extension-blockquote';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, common } from 'lowlight';
+import Image from '@tiptap/extension-image';
 import { MathExtension, AudioExtension, FileExtension } from '../Shared/TiptapExtensions';
-import { Sigma, Bold, Italic, List, ListOrdered, Link as LinkIcon, Trash2 } from 'lucide-react';
+import { Sigma, Bold, Italic, List, ListOrdered, Link as LinkIcon, Quote, Code, AlignLeft, AlignCenter, AlignRight, CheckSquare, Image as ImageIcon } from 'lucide-react';
+import CodeBlockComponent from '../StudyNotes/CodeBlockComponent';
 import * as api from '../../services/api';
 
-export default function JournalEditor({ content, onChange, onSaveMedia }) {
+const lowlight = createLowlight(common);
+
+export default function JournalEditor({ content, onChange, onSaveMedia, entryId }) {
     const [mathModalOpen, setMathModalOpen] = useState(false);
     const [mathInput, setMathInput] = useState('');
+    const fileInputRef = useRef(null);
     
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            StarterKit.configure({
+                codeBlock: false,
+                heading: false,
+                blockquote: false,
+            }),
+            Heading.configure({ levels: [1, 2, 3] }),
             Underline,
-            Link.configure({ openOnClick: false }),
+            Link.configure({ openOnClick: false, autolink: true }),
+            TextAlign.configure({ types: ['heading', 'paragraph'] }),
+            Blockquote,
+            TaskList,
+            TaskItem.configure({ nested: true }),
             Placeholder.configure({ placeholder: 'Write your heart out...' }),
+            CodeBlockLowlight.extend({
+                addNodeView() {
+                    return ReactNodeViewRenderer(CodeBlockComponent);
+                },
+            }).configure({ lowlight }),
+            Image.extend({
+                addAttributes() {
+                    return {
+                        ...this.parent?.(),
+                        media_id: {
+                            default: null,
+                            parseHTML: el => el.getAttribute('data-media-id'),
+                            renderHTML: attrs => ({ 'data-media-id': attrs.media_id }),
+                        },
+                    };
+                },
+            }).configure({
+                allowBase64: true,
+                HTMLAttributes: {
+                    class: 'journal-embedded-image',
+                    referrerpolicy: 'no-referrer',
+                },
+            }),
             MathExtension,
             AudioExtension,
             FileExtension,
@@ -51,18 +95,19 @@ export default function JournalEditor({ content, onChange, onSaveMedia }) {
     return (
         <div className="journal-editor-rich">
             <div className="journal-toolbar">
+                {/* Text Formatting */}
                 <div className="toolbar-group">
                     <button 
                         className={`toolbar-btn ${editor.isActive('bold') ? 'active' : ''}`}
                         onClick={() => editor.chain().focus().toggleBold().run()}
-                        title="Bold"
+                        title="Bold (Ctrl+B)"
                     >
                         <Bold size={18} />
                     </button>
                     <button 
                         className={`toolbar-btn ${editor.isActive('italic') ? 'active' : ''}`}
                         onClick={() => editor.chain().focus().toggleItalic().run()}
-                        title="Italic"
+                        title="Italic (Ctrl+I)"
                     >
                         <Italic size={18} />
                     </button>
@@ -71,12 +116,13 @@ export default function JournalEditor({ content, onChange, onSaveMedia }) {
                         onClick={() => editor.chain().focus().toggleUnderline().run()}
                         title="Underline"
                     >
-                        <Bold size={18} style={{ textDecoration: 'underline' }} />
+                        <span style={{ textDecoration: 'underline', fontWeight: 'bold' }}>U</span>
                     </button>
                 </div>
 
                 <div className="toolbar-divider" />
 
+                {/* Lists */}
                 <div className="toolbar-group">
                     <button 
                         className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`}
@@ -88,29 +134,103 @@ export default function JournalEditor({ content, onChange, onSaveMedia }) {
                     <button 
                         className={`toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`}
                         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                        title="Ordered List"
+                        title="Numbered List"
                     >
                         <ListOrdered size={18} />
+                    </button>
+                    <button 
+                        className={`toolbar-btn ${editor.isActive('taskList') ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().toggleTaskList().run()}
+                        title="Task List"
+                    >
+                        <CheckSquare size={18} />
                     </button>
                 </div>
 
                 <div className="toolbar-divider" />
 
+                {/* Blocks */}
+                <div className="toolbar-group">
+                    <button 
+                        className={`toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                        title="Quote"
+                    >
+                        <Quote size={18} />
+                    </button>
+                    <button 
+                        className={`toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                        title="Code Block"
+                    >
+                        <Code size={18} />
+                    </button>
+                </div>
+
+                <div className="toolbar-divider" />
+
+                {/* Alignment */}
+                <div className="toolbar-group">
+                    <button 
+                        className={`toolbar-btn ${editor.isActive({ textAlign: 'left' }) ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                        title="Align Left"
+                    >
+                        <AlignLeft size={18} />
+                    </button>
+                    <button 
+                        className={`toolbar-btn ${editor.isActive({ textAlign: 'center' }) ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                        title="Align Center"
+                    >
+                        <AlignCenter size={18} />
+                    </button>
+                    <button 
+                        className={`toolbar-btn ${editor.isActive({ textAlign: 'right' }) ? 'active' : ''}`}
+                        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                        title="Align Right"
+                    >
+                        <AlignRight size={18} />
+                    </button>
+                </div>
+
+                <div className="toolbar-divider" />
+
+                {/* Links & Media */}
                 <div className="toolbar-group">
                     <button 
                         className={`toolbar-btn ${editor.isActive('link') ? 'active' : ''}`}
                         onClick={toggleLink}
-                        title="Link"
+                        title="Insert Link"
                     >
                         <LinkIcon size={18} />
                     </button>
+                    <button 
+                        className="toolbar-btn"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Insert Image"
+                    >
+                        <ImageIcon size={18} />
+                    </button>
+                    <input 
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file && entryId) {
+                                onSaveMedia?.(file, 'image');
+                            }
+                        }}
+                    />
                     <button 
                         className="toolbar-btn latex-btn"
                         onClick={() => setMathModalOpen(true)}
                         title="Insert LaTeX"
                     >
                         <Sigma size={18} />
-                        <span>LaTeX</span>
+                        <span>TeX</span>
                     </button>
                 </div>
             </div>

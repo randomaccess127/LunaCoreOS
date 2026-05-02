@@ -527,8 +527,15 @@ export default function JournalPage() {
                                 <JournalEditor 
                                     content={draft.text_content || ''} 
                                     onChange={(val) => onChange('text_content', val)}
+                                    onSaveMedia={uploadMedia}
+                                    entryId={active?.entry_id}
                                 />
-                                <div className="word-count">{wc} words</div>
+                                <div className="word-count">
+                                    <span>📝 {wc} words</span>
+                                    <span>⏱️ {Math.ceil(wc / 200)} min read</span>
+                                    {mediaItems.images.length > 0 && <span>🖼️ {mediaItems.images.length} images</span>}
+                                    {mediaItems.audio.length > 0 && <span>🔊 {mediaItems.audio.length} audio</span>}
+                                </div>
                             </div>
 
                             {/* Media row */}
