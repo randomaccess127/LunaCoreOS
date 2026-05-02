@@ -41,8 +41,6 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
-    // ── Vault Lock: clears automatically when tab is closed ──
-    const [vaultUnlocked, setVaultUnlocked] = useState(() => sessionStorage.getItem('luna_vault_unlocked') === 'true');
 
     const triggerPreload = () => {
         if (preload.active) return;
@@ -53,12 +51,33 @@ export default function App() {
     };
 
     useEffect(() => {
-        // Handle Supabase Auth Session
+        // ── TRUE VAULT LOCK: Tab Close Detection ──────────────────────────────
+        // How it works:
+        //   beforeunload fires on BOTH refresh and tab close.
+        //   sessionStorage persists on refresh but CLEARS on tab close.
+        //   So: if 'luna_navigating' is NOT in sessionStorage on load → tab was closed.
+        //   If it IS present → it was a refresh → keep session alive.
+        const wasRefresh = sessionStorage.getItem('luna_navigating') === 'true';
+        sessionStorage.removeItem('luna_navigating'); // reset for next event
+
+        if (!wasRefresh) {
+            // ── Fresh tab open after close: fully sign out server-side ──
+            // This invalidates the Supabase JWT. No DevTools trick can bypass a dead token.
+            console.log('[Vault] 🔐 Tab was closed — signing out server-side.');
+            supabase.auth.signOut();
+            sessionStorage.removeItem('luna_vault_unlocked');
+        }
+
+        const handleBeforeUnload = () => {
+            // Mark that this unload is a navigation/refresh (not a close)
+            sessionStorage.setItem('luna_navigating', 'true');
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // ── Handle Supabase Auth Session ──────────────────────────────────────
         const initAuth = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
-                // ── Vault Lock Check ──
-                // Even if Supabase session is valid, require re-entry if tab was closed.
                 const isUnlocked = sessionStorage.getItem('luna_vault_unlocked') === 'true';
                 setUser((session?.user && isUnlocked) ? session.user : null);
             } catch (err) {
@@ -72,13 +91,17 @@ export default function App() {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             console.log(`[Auth Event] ${_event}`, session ? 'User present' : 'No user');
-            setUser(session?.user ?? null);
+            const isUnlocked = sessionStorage.getItem('luna_vault_unlocked') === 'true';
+            if (session?.user && !isUnlocked) {
+                console.log('[Vault] 🔒 Locked — master key required.');
+                setUser(null);
+            } else {
+                setUser(session?.user ?? null);
+            }
             setAuthLoading(false);
         });
 
-        // ── Session Heartbeat ──
-        // Supabase auto-refresh sometimes fails in suspended tabs.
-        // We explicitly pulse the session every 15 minutes to keep it alive.
+        // ── Session Heartbeat (only while tab is open) ────────────────────────
         const heartbeat = setInterval(async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
@@ -91,6 +114,7 @@ export default function App() {
         return () => {
             subscription.unsubscribe();
             clearInterval(heartbeat);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, []);
 
@@ -193,20 +217,24 @@ export default function App() {
                             loginBtn.disabled = true;
                             loginBtn.innerText = 'Unlocking...';
 
+                            // ── Set flag BEFORE auth call to prevent race condition ──
+                            // onAuthStateChange fires instantly on SIGNED_IN,
+                            // so the flag must already be present when it checks.
+                            sessionStorage.setItem('luna_vault_unlocked', 'true');
+
                             const { error } = await supabase.auth.signInWithPassword({
                                 email: 'randomaccess651@gmail.com',
                                 password: pwd
                             });
 
                             if (error) {
+                                // Auth failed — remove the flag we pre-set
+                                sessionStorage.removeItem('luna_vault_unlocked');
                                 alert('Invalid Master Key. Access Denied.');
                                 loginBtn.disabled = false;
                                 loginBtn.innerText = 'Unlock Sanctuary';
-                            } else {
-                                // ── Set vault lock flag for this tab session ──
-                                sessionStorage.setItem('luna_vault_unlocked', 'true');
-                                setVaultUnlocked(true);
                             }
+                            // On success: onAuthStateChange fires, sees flag = true, unlocks ✅
                         } catch (err) {
                             console.error('Vault login failed:', err);
                             loginBtn.disabled = false;

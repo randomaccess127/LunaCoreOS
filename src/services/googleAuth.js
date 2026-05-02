@@ -1,4 +1,4 @@
-const CLIENT_ID = '107297291208-cglbtmr9l8tr27rinnk1cnu2ob5emc44.apps.googleusercontent.com';
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive';
 
 // We import supabase from the centralized client to avoid circular dependencies
@@ -44,8 +44,8 @@ export const getDriveToken = async () => {
 
 // ── Persistence ───────────────────────────────────────────────
 function loadCachedToken() {
-    const cached = localStorage.getItem(TOKEN_KEY);
-    const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+    const cached = sessionStorage.getItem(TOKEN_KEY);
+    const expiry = parseInt(sessionStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
     if (cached && Date.now() < expiry) {
         accessToken = cached;
         startBackgroundRefresh();
@@ -57,16 +57,17 @@ function loadCachedToken() {
 
 function saveToken(token) {
     accessToken = token;
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + TOKEN_LIFETIME_MS));
+    // Use sessionStorage so token clears when tab closes (more secure than localStorage)
+    sessionStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + TOKEN_LIFETIME_MS));
     startBackgroundRefresh();
 }
 
 export const clearDriveToken = () => {
     accessToken = null;
     cachedToken = null;
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_EXPIRY_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_EXPIRY_KEY);
     if (refreshInterval) clearInterval(refreshInterval);
 };
 

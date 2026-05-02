@@ -233,7 +233,7 @@ CREATE TABLE app_passwords (
   "id" TEXT PRIMARY KEY, "label" TEXT, "hash" TEXT, "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. APPLY ROW LEVEL SECURITY (RLS) TO ALL TABLES
+-- 3. APPLY ROW LEVEL SECURITY — Authenticated users only
 DO $$ 
 DECLARE 
   r RECORD;
@@ -241,7 +241,10 @@ BEGIN
   FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
     EXECUTE 'ALTER TABLE ' || quote_ident(r.tablename) || ' ENABLE ROW LEVEL SECURITY';
     EXECUTE 'DROP POLICY IF EXISTS "Allow All" ON ' || quote_ident(r.tablename);
-    EXECUTE 'CREATE POLICY "Allow All" ON ' || quote_ident(r.tablename) || ' FOR ALL USING (true)';
+    EXECUTE 'DROP POLICY IF EXISTS "Auth Only" ON ' || quote_ident(r.tablename);
+    -- Only authenticated Supabase users can access data
+    EXECUTE 'CREATE POLICY "Auth Only" ON ' || quote_ident(r.tablename) || 
+            ' FOR ALL USING (auth.role() = ''authenticated'')';
   END LOOP;
 END $$;
 

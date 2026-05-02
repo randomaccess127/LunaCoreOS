@@ -1,11 +1,24 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, prefer, cache-control, pragma, expires, if-modified-since",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Expose-Headers": "content-length, x-json",
-};
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://dfpngowpkozggqiyrtrr.supabase.co",
+  // Add your Render URL here after deployment e.g:
+  // "https://luna-sanctuary.onrender.com",
+];
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") || "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, prefer, cache-control, pragma, expires, if-modified-since",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Expose-Headers": "content-length, x-json",
+    "Vary": "Origin",
+  };
+}
 
 // Helper to convert PEM to CryptoKey (Very robust version)
 async function importPrivateKey(pem: string) {
