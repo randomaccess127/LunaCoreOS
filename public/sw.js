@@ -6,6 +6,7 @@ const PRECACHE_ASSETS = [
     '/',
     '/index.html',
     '/favicon.svg',
+    '/moon-icon.png',
     '/manifest.json'
 ];
 
@@ -134,8 +135,8 @@ async function checkNewContentAndNotify() {
       for (const item of json.data) {
         self.registration.showNotification(item.title, {
           body: item.message,
-          icon: '/favicon.svg', // Default icon
-          badge: '/favicon.svg',
+          icon: '/moon-icon.png',
+          badge: '/moon-icon.png',
           data: item.data,
           vibrate: [200, 100, 200]
         });

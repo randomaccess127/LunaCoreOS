@@ -243,32 +243,25 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
     const [lightboxItems, setLightboxItems] = useState([]);
     const [likePending, setLikePending] = useState(new Set());
 
+    // Always rebuild Drive thumbnail URLs from the file ID to avoid 403 expired signed URLs
+    const buildSrcFromId = (id) => ({
+        src: `https://lh3.googleusercontent.com/u/0/d/${id}=s800`,
+        largeSrc: `https://lh3.googleusercontent.com/u/0/d/${id}=s1600`,
+    });
+
     useEffect(() => {
         getLikedImages()
             .then(res => {
                 const items = Array.isArray(res) ? res : (res.data?.liked || res.liked || []);
                 setLiked(items.map(it => {
                     const finalId = it.id || it.ID;
-                    let finalSrc = it.thumbnailLink || it.ThumbnailLink || it.src;
-                    let largeSrc = '';
-                    
-                    // Force a signed, cookie-less URL format that works for private files
-                    if (!finalSrc || (typeof finalSrc === 'string' && finalSrc.includes('drive.google.com/thumbnail'))) {
-                        finalSrc = `https://lh3.googleusercontent.com/u/0/d/${finalId}=s800`;
-                        largeSrc = `https://lh3.googleusercontent.com/u/0/d/${finalId}=s1600`;
-                    } else if (typeof finalSrc === 'string' && finalSrc.includes('=s')) {
-                        const base = finalSrc.split('=s')[0];
-                        finalSrc = base + '=s800';
-                        largeSrc = base + '=s1600';
-                    } else {
-                        largeSrc = finalSrc;
-                    }
-
+                    // Always regenerate from ID — stored Drive URLs expire and return 403
+                    const { src, largeSrc } = buildSrcFromId(finalId);
                     return {
-                        id: finalId, 
-                        title: it.title || it.Title || 'Untitled Asset', 
-                        src: finalSrc, 
-                        largeSrc: largeSrc,
+                        id: finalId,
+                        title: it.title || it.Title || 'Untitled Asset',
+                        src,
+                        largeSrc,
                         type: it.type || it.Type || 'image'
                     };
                 }));
@@ -333,25 +326,13 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
             const shuffled = [...raw].sort(() => Math.random() - 0.5);
             
             const formatted = shuffled.map(item => {
-                let finalSrc = item.thumbnailLink;
-                let largeSrc = '';
-                
-                if (!finalSrc || finalSrc.includes('drive.google.com/thumbnail')) {
-                    finalSrc = `https://lh3.googleusercontent.com/u/0/d/${item.id}=s800`;
-                    largeSrc = `https://lh3.googleusercontent.com/u/0/d/${item.id}=s1600`;
-                } else if (finalSrc.includes('=s')) {
-                    const base = finalSrc.split('=s')[0];
-                    finalSrc = base + '=s800';
-                    largeSrc = base + '=s1600';
-                } else {
-                    largeSrc = finalSrc;
-                }
-
+                // Always use stable ID-based URL — thumbnailLink from Drive API expires and causes 403
+                const { src, largeSrc } = buildSrcFromId(item.id);
                 return {
-                    id: item.id, 
-                    src: finalSrc, 
-                    largeSrc: largeSrc,
-                    title: item.name, 
+                    id: item.id,
+                    src,
+                    largeSrc,
+                    title: item.name,
                     type: classifyMime(item.mimeType),
                 };
             });
