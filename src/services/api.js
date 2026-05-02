@@ -340,7 +340,7 @@ export const getDashboardStats = async () => {
         
         return { 
             success: true,
-            data: config?.content || { user_name: 'Luna User', theme: 'dark' },
+            data: config?.content || { user_name: 'Md Ismail', theme: 'dark' },
             stats: {
                 journal: journalCount || 0,
                 todos: todoCount || 0
@@ -350,7 +350,7 @@ export const getDashboardStats = async () => {
         console.warn('Dashboard stats fetch failed', err);
         return { 
             success: true,
-            data: { user_name: 'Luna User', theme: 'dark' },
+            data: { user_name: 'Md Ismail', theme: 'dark' },
             stats: { journal: 0, todos: 0 } 
         };
     }

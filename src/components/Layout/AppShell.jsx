@@ -14,8 +14,12 @@ export default function AppShell({ activeTab, onNavigate, userName, isOffline, p
     };
 
     const handleMusicClick = () => {
+        console.log('[AppShell] Music button clicked');
         if (window.openMusicPlayer) {
+            console.log('[AppShell] Calling window.openMusicPlayer()');
             window.openMusicPlayer();
+        } else {
+            console.warn('[AppShell] window.openMusicPlayer is not defined!');
         }
     };
 
@@ -71,8 +75,10 @@ export default function AppShell({ activeTab, onNavigate, userName, isOffline, p
                     onMusicClick={handleMusicClick}
                 />
 
-                <main className="content-area tab-enter" key={activeTab}>
-                    {children}
+                <main className="content-area tab-enter">
+                    <div key={activeTab} style={{ minHeight: '100%' }}>
+                        {children}
+                    </div>
                 </main>
             </div>
 

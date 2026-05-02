@@ -6,10 +6,10 @@
 /* ── Candy Color Palette (Dark Mode Variant) ─────────────── */
 .candy-theme {
   /* Main backgrounds - soft and cozy */
-  --bg: #0f0e1a;
-  --surface: #1a1930;
-  --surface2: #2a2640;
-  --surface3: #3a3652;
+  --bg: transparent;
+  --surface: rgba(26, 25, 48, 0.35);
+  --surface2: rgba(42, 38, 64, 0.45);
+  --surface3: rgba(58, 54, 82, 0.55);
   
   /* Candy accent palette */
   --candy-pink: #ff6b9d;
@@ -48,10 +48,10 @@
 }
 [data-theme="dark"].candy-theme {
   /* Main backgrounds - soft and cozy */
-  --bg: #0f0e1a;
-  --surface: #1a1930;
-  --surface2: #2a2640;
-  --surface3: #3a3652;
+  --bg: transparent;
+  --surface: rgba(26, 25, 48, 0.35);
+  --surface2: rgba(42, 38, 64, 0.45);
+  --surface3: rgba(58, 54, 82, 0.55);
   
   /* Candy accent palette */
   --candy-pink: #ff6b9d;
@@ -128,7 +128,8 @@
     flex-direction: column;
     height: 100%;
     gap: 0;
-    background: linear-gradient(135deg, var(--bg) 0%, var(--surface) 100%);
+    background: transparent !important;
+    backdrop-filter: blur(40px);
   }
 
   .candy-theme .journal-list {
@@ -136,7 +137,7 @@
     border-right: none;
     border-bottom: 1px solid var(--border);
     overflow-y: auto;
-    background: var(--surface);
+    background: transparent !important;
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
@@ -267,7 +268,7 @@
     flex: 1;
     padding: 1.25rem;
     overflow-y: auto;
-    background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+    background: transparent !important;
   }
 
   /* Empty state */

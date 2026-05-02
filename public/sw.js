@@ -48,6 +48,14 @@ self.addEventListener('fetch', (event) => {
     // 1. Skip non-GET requests (like API posts to Apps Script)
     if (event.request.method !== 'GET') return;
 
+    // Skip non-HTTP(S) protocols (like chrome-extension:// or ws://)
+    if (!url.startsWith('http')) return;
+
+    // Bypass Vite HMR and dev server requests
+    if (url.includes('?t=') || url.includes('@vite') || url.includes('.jsx')) {
+        return;
+    }
+
     // 2. Media Caching Strategy: Cache-First
     const isMedia = MEDIA_PATTERNS.some(p => url.includes(p));
     if (isMedia) {
@@ -62,8 +70,8 @@ self.addEventListener('fetch', (event) => {
                             cache.put(event.request, networkResponse.clone());
                         }
                         return networkResponse;
-                    }).catch(() => {
-                        return null; 
+                    }).catch((err) => {
+                        throw err; 
                     });
                 });
             })
@@ -83,10 +91,15 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => {
             return cache.match(event.request).then((cachedResponse) => {
                 const fetchPromise = fetch(event.request).then((networkResponse) => {
-                    cache.put(event.request, networkResponse.clone());
+                    // Only cache valid HTTP responses
+                    if (networkResponse && networkResponse.status === 200) {
+                        cache.put(event.request, networkResponse.clone());
+                    }
                     return networkResponse;
-                }).catch(() => {
-                    // Fail silently, we already gave the cached response if available
+                }).catch((error) => {
+                    // If network fails and we have no cache, we must throw or return a fallback
+                    // to avoid "Failed to convert value to 'Response'" TypeError.
+                    throw error;
                 });
                 
                 return cachedResponse || fetchPromise;

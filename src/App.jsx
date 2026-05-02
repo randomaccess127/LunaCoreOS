@@ -31,6 +31,7 @@ import { OfflineCache } from './services/offlineCache';
 import OfflineCacheBadge from './components/OfflineCacheBadge';
 import { supabase } from './services/supabaseClient';
 import { loginWithSupabase } from './services/googleAuth';
+import Dither from './components/Shared/Dither';
 
 export default function App() {
     const [tab, setTab] = useState(() => localStorage.getItem('luna_active_tab') || 'journal');
@@ -41,6 +42,18 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
+    
+    // Curated Lock Screen Dither Colors (Sophisticated, non-party vibes)
+    const [lockScreenColor] = useState(() => {
+        const colors = [
+            [0.5, 0.5, 0.5], // Original Grey
+            [0.8, 0.5, 0.2], // Amber (User's favorite)
+            [0.4, 0.5, 0.7], // Steel Blue
+            [0.6, 0.4, 0.6], // Muted Lavender
+            [0.3, 0.6, 0.5], // Sage/Teal
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    });
 
     const triggerPreload = () => {
         if (preload.active) return;
@@ -191,7 +204,17 @@ export default function App() {
     if (authLoading) {
         return (
             <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
-                <div className="loader" style={{ border: '3px solid #1a1a1a', borderTop: '3px solid #f97316', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite' }}></div>
+                <Dither 
+                waveColor={[0.5, 0.5, 0.5]}
+                disableAnimation={false}
+                enableMouseInteraction
+                mouseRadius={0.3}
+                colorNum={4.3}
+                waveAmplitude={0.3}
+                waveFrequency={3}
+                waveSpeed={0.05}
+            />
+                <div className="loader" style={{ border: '3px solid #1a1a1a', borderTop: '3px solid #f97316', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', position: 'relative', zIndex: 1 }}></div>
                 <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
             </div>
         );
@@ -200,12 +223,22 @@ export default function App() {
     if (!user) {
         return (
             <div className="vault-theme">
+                <Dither 
+                waveColor={lockScreenColor}
+                disableAnimation={false}
+                enableMouseInteraction
+                mouseRadius={0.3}
+                colorNum={4.3}
+                waveAmplitude={0.3}
+                waveFrequency={3}
+                waveSpeed={0.05}
+            />
                 <div className="vault-container">
                     <div className="vault-icon">
                         <div className="pulse-ring"></div>
-                        <div style={{ fontSize: '3rem', position: 'relative', zIndex: 2 }}>🌘</div>
+                        <div style={{ fontSize: '6rem', position: 'relative', zIndex: 2 }}>🌘</div>
                     </div>
-                    <h1>Luna Sanctuary</h1>
+                    <h1>LunaCore OS</h1>
                     <p>Enter your Master Key to unlock your private space.</p>
                     
                     <form onSubmit={async (e) => {
@@ -275,26 +308,23 @@ export default function App() {
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a0f 100%);
+                        background: transparent;
                         color: #fff;
                         font-family: 'Inter', sans-serif;
                     }
                     .vault-container {
                         text-align: center;
-                        padding: 3rem;
-                        background: rgba(20, 20, 30, 0.6);
-                        backdrop-filter: blur(20px);
-                        border: 1px solid rgba(255, 255, 255, 0.1);
-                        border-radius: 2rem;
-                        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                        padding: 2rem;
+                        background: transparent;
                         width: 100%;
-                        max-width: 400px;
+                        max-width: 450px;
+                        z-index: 10;
                     }
                     .vault-icon {
                         position: relative;
-                        width: 80px;
-                        height: 80px;
-                        margin: 0 auto 2rem;
+                        width: 140px;
+                        height: 140px;
+                        margin: 0 auto 3rem;
                         display: flex;
                         align-items: center;
                         justify-content: center;
@@ -312,16 +342,19 @@ export default function App() {
                         100% { transform: scale(1.5); opacity: 0; }
                     }
                     .vault-container h1 {
-                        font-size: 2rem;
+                        font-size: 2.5rem;
                         margin-bottom: 0.5rem;
-                        background: linear-gradient(to right, #fff, #a5a5a5);
-                        -webkit-background-clip: text;
-                        -webkit-text-fill-color: transparent;
+                        color: #ffffff;
+                        font-weight: 700;
+                        letter-spacing: -0.02em;
                     }
                     .vault-container p {
-                        color: #888;
+                        color: #ffffff;
                         font-size: 0.9rem;
                         margin-bottom: 2.5rem;
+                        font-weight: 500;
+                        letter-spacing: 0.05rem;
+                        opacity: 0.8;
                     }
                     .input-wrapper {
                         position: relative;
@@ -331,7 +364,8 @@ export default function App() {
                         width: 100%;
                         padding: 1.2rem;
                         padding-right: 3.5rem;
-                        background: rgba(0, 0, 0, 0.3);
+                        background: rgba(255, 255, 255, 0.03);
+                        backdrop-filter: blur(5px);
                         border: 1px solid rgba(255, 255, 255, 0.1);
                         border-radius: 1rem;
                         color: #fff;
@@ -342,7 +376,7 @@ export default function App() {
                     }
                     .vault-form input:focus {
                         border-color: #f97316;
-                        box-shadow: 0 0 20px rgba(249, 115, 22, 0.2);
+                        background: rgba(255, 255, 255, 0.07);
                     }
                     .toggle-password {
                         position: absolute;
@@ -384,9 +418,11 @@ export default function App() {
                     .vault-footer {
                         margin-top: 2.5rem;
                         font-size: 0.75rem;
-                        color: #444;
+                        color: #39ff14;
                         text-transform: uppercase;
-                        letter-spacing: 0.1rem;
+                        letter-spacing: 0.2rem;
+                        font-weight: 600;
+                        text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
                     }
                 ` }} />
             </div>
@@ -395,6 +431,16 @@ export default function App() {
 
     return (
         <>
+            <Dither 
+                waveColor={lockScreenColor}
+                disableAnimation={false}
+                enableMouseInteraction={true}
+                mouseRadius={0.3}
+                colorNum={4.3}
+                waveAmplitude={0.3}
+                waveFrequency={3}
+                waveSpeed={0.05}
+            />
             <AppShell 
                 activeTab={tab} 
                 onNavigate={navigate} 

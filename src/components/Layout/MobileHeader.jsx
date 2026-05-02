@@ -12,7 +12,7 @@ export default function MobileHeader({ userName, isOffline, onMusicClick }) {
         <header className="mobile-header">
             <div className="mobile-header-branding">
                 <img src="/profile.jpg?v=2" alt="Logo" className="mobile-logo-img" />
-                <span className="mobile-header-title">Luna's Notes</span>
+                <span className="mobile-header-title">LunaCoreOS</span>
             </div>
 
             <div className="mobile-header-status">

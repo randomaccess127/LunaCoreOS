@@ -2,13 +2,15 @@ import { useEffect } from 'react';
 import { useAudio } from '../../context/AudioContext';
 
 export default function YTPlayerModal({ videoId, onClose }) {
-    const { onContentAudioPlay, onContentAudioStop } = useAudio();
+    const { audioRef } = useAudio();
 
     useEffect(() => {
         if (!videoId) return;
 
         // Duck/Pause music when player opens
-        onContentAudioPlay();
+        if (audioRef?.current && !audioRef.current.paused) {
+            audioRef.current.pause();
+        }
 
         const handleEsc = (e) => {
             if (e.key === 'Escape') onClose();
@@ -21,10 +23,8 @@ export default function YTPlayerModal({ videoId, onClose }) {
         return () => {
             window.removeEventListener('keydown', handleEsc);
             document.body.style.overflow = '';
-            // Restore music when player closes
-            onContentAudioStop();
         };
-    }, [videoId, onClose, onContentAudioPlay, onContentAudioStop]);
+    }, [videoId, onClose, audioRef]);
 
     if (!videoId) return null;
 

@@ -1,4 +1,6 @@
+import { useState, useRef } from 'react';
 import { useAudio } from '../../context/AudioContext';
+import Dither from '../Shared/Dither';
 import { Disc, Settings, Play, Pause, SkipForward } from 'lucide-react';
 
 const TABS = [
@@ -31,19 +33,50 @@ const TABS = [
 
 export default function Sidebar({ active, onNavigate, userName, isOffline, onPreload, preload, isOpen, onClose, onMusicClick }) {
     const { playing, currentTrack, playTrack, playNext } = useAudio();
+    const [isHovered, setIsHovered] = useState(false);
+    const hoverTimeout = useRef(null);
+
+    const handleMouseEnter = () => {
+        clearTimeout(hoverTimeout.current);
+        hoverTimeout.current = setTimeout(() => {
+            setIsHovered(true);
+        }, 150); // Small delay to avoid accidental triggers
+    };
+
+    const handleMouseLeave = () => {
+        clearTimeout(hoverTimeout.current);
+        hoverTimeout.current = setTimeout(() => {
+            setIsHovered(false);
+        }, 200); // Slightly longer delay for exit to feel stable
+    };
 
     return (
         <>
             {/* Mobile Drawer Overlay */}
             {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
 
-            <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+            <aside 
+                className={`sidebar scifi-sidebar ${isOpen ? 'open' : ''} ${isHovered ? 'is-expanded' : ''}`}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
+                {/* Sharp Internal Dither Background */}
+                <div className="sidebar-internal-dither">
+                    <Dither 
+                        waveColor={[0.5, 0.5, 0.5]} 
+                        waveSpeed={0.03}
+                        waveAmplitude={0.2}
+                        waveFrequency={2}
+                        colorNum={4}
+                        pixelSize={2}
+                    />
+                </div>
 
             <div className="sidebar-logo">
                 <div className="logo-flex" onClick={() => onNavigate('dashboard')} style={{ cursor: 'pointer' }}>
                     <img src="/profile.jpg" alt="Logo" className="app-logo-img" />
                     <div className="logo-text">
-                        <h1>Luna's Notes</h1>
+                        <h1>LunaCoreOS</h1>
                         <p>Your private sanctuary</p>
                     </div>
                 </div>
@@ -89,20 +122,14 @@ export default function Sidebar({ active, onNavigate, userName, isOffline, onPre
             )}
 
             <div className="sidebar-footer">
-                <div className="user-profile-stack">
-                    <img src="/profile.jpg" alt="Profile" className="profile-avatar-xs" />
-                    <span className="user-name">{userName || 'You'}</span>
-                </div>
                 <div className="sidebar-footer-actions">
                     <button 
                         className={`sidebar-music-btn ${playing ? 'is-playing' : ''}`} 
                         onClick={onMusicClick}
                         title="Music Player"
                     >
-                        <Disc size={22} />
-                    </button>
-                    <button className="settings-btn" title="Settings">
-                        <Settings size={18} />
+                        <Disc size={24} className={playing ? 'spinning' : ''} />
+                        <div className="music-btn-glow"></div>
                     </button>
                 </div>
             </div>

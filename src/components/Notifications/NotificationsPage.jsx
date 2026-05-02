@@ -81,7 +81,7 @@ export default function NotificationsPage() {
 
     const testNotification = () => {
         if (Notification.permission === 'granted') {
-            new Notification('Lunasdiary Test', {
+            new Notification('Md Ismaildiary Test', {
                 body: 'This is a test notification! It works 🚀',
                 icon: '/favicon.svg'
             });

@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useAudio, STATIONS } from '../../context/AudioContext';
+import Dither from '../Shared/Dither';
 import { 
     Play, Pause, X, Volume2, VolumeX, Disc, 
     Coffee, Wind, Moon, Radio
@@ -51,11 +52,16 @@ export default function MusicPlayer() {
 
     // Add method to open modal from header
     useEffect(() => {
+        console.log('[MusicPlayer] Mounting and registering window.openMusicPlayer');
         window.openMusicPlayer = () => {
+            console.log('[MusicPlayer] window.openMusicPlayer called, opening modal');
             setShowModal(true);
             localStorage.setItem(LS_MUSIC_MODAL_KEY, 'true');
         };
-        return () => delete window.openMusicPlayer;
+        return () => {
+            console.log('[MusicPlayer] Unmounting, deleting window.openMusicPlayer');
+            delete window.openMusicPlayer;
+        };
     }, []);
 
     // ── YT Player helpers ─────────────────────────────────────
@@ -97,8 +103,8 @@ export default function MusicPlayer() {
                             if ('mediaSession' in navigator) {
                                 navigator.mediaSession.metadata = new window.MediaMetadata({
                                     title: title,
-                                    artist: 'Luna Radio (YouTube)',
-                                    album: 'Luna Vault',
+                                    artist: 'Md Ismail Radio (YouTube)',
+                                    album: 'Md Ismail Vault',
                                     artwork: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }]
                                 });
                             }
@@ -144,7 +150,7 @@ export default function MusicPlayer() {
             navigator.mediaSession.metadata = new window.MediaMetadata({
                 title: STATIONS[0].desc,
                 artist: STATIONS[0].label,
-                album: 'Luna Vault',
+                album: 'Md Ismail Vault',
                 artwork: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }]
             });
         }
@@ -166,18 +172,34 @@ export default function MusicPlayer() {
 
     // ── Controls ──────────────────────────────────────────────
     const togglePlay = () => {
+        console.log('[MusicPlayer] togglePlay called. Current station:', station.id, 'Playing:', playing);
         if (station.id === 'ambience' || station.id === 'radio') {
-            if (!ytPlayer.current) return;
+            if (!ytPlayer.current) {
+                console.log('[MusicPlayer] ytPlayer missing, recreating...');
+                createYTPlayer(station.id === 'radio' ? extractYTId(radioUrl) : pickRandom());
+                return;
+            }
             try {
-                if (playing) { ytPlayer.current.pauseVideo(); setPlaying(false); }
-                else { ytPlayer.current.playVideo(); setPlaying(true); }
-            } catch (_) { }
+                if (playing) { 
+                    console.log('[MusicPlayer] Pausing YouTube');
+                    ytPlayer.current.pauseVideo(); 
+                    setPlaying(false); 
+                } else { 
+                    console.log('[MusicPlayer] Playing YouTube');
+                    ytPlayer.current.playVideo(); 
+                    setPlaying(true); 
+                }
+            } catch (err) { console.error('[MusicPlayer] YT Control error:', err); }
             return;
         }
         const a = audioRef.current;
         if (!a) return;
-        if (a.paused) a.play().catch(() => { });
-        else a.pause();
+        console.log('[MusicPlayer] Toggling Audio Element. Current paused:', a.paused);
+        if (a.paused) {
+            a.play().catch(err => console.error('[MusicPlayer] Audio Play error:', err));
+        } else {
+            a.pause();
+        }
     };
 
     const toggleMute = () => {
@@ -230,6 +252,7 @@ export default function MusicPlayer() {
     };
 
     const handleStation = (st) => {
+        console.log('[MusicPlayer] Switching to station:', st.id);
         if (st.id === 'radio') {
             selectStation(st);
             if (radioUrl) {
@@ -255,13 +278,14 @@ export default function MusicPlayer() {
             const a = audioRef.current;
             if (!a) return;
             a.src = st.url;
-            a.play().catch(() => { });
+            a.load();
+            a.play().catch(err => console.error('[MusicPlayer] Station Play error:', err));
 
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new window.MediaMetadata({
                     title: st.desc,
                     artist: st.label,
-                    album: 'Luna Vault',
+                    album: 'Md Ismail Vault',
                     artwork: [{ src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }]
                 });
             }
@@ -283,6 +307,18 @@ export default function MusicPlayer() {
                 <>
                     <div className="music-modal-overlay" onClick={closeModal} />
                     <div className="music-modal">
+                        {/* Sharp Internal Dither Background */}
+                        <div className="modal-internal-dither">
+                            <Dither 
+                                waveColor={[0.8, 0.5, 0.2]} 
+                                waveSpeed={0.08}
+                                waveAmplitude={0.4}
+                                waveFrequency={4}
+                                colorNum={4}
+                                pixelSize={2}
+                            />
+                        </div>
+
                         <div className="music-modal-header">
                             <h2><Disc size={20} style={{ color: 'var(--accent)' }} /> Music Player</h2>
                             <button className="music-modal-close" onClick={closeModal}>

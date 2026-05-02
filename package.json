@@ -1,7 +1,7 @@
 {
   "name": "lunasnotes",
   "version": "1.0.0",
-  "description": "Luna's Notes — Personal journaling and productivity app",
+  "description": "Md Ismail's Notes — Personal journaling and productivity app",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,6 +13,8 @@
   "type": "module",
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@react-three/fiber": "^9.6.1",
+    "@react-three/postprocessing": "^3.0.4",
     "@supabase/supabase-js": "^2.105.1",
     "@tiptap/extension-blockquote": "^3.22.4",
     "@tiptap/extension-code-block-lowlight": "^3.22.4",
@@ -32,11 +34,13 @@
     "face-api.js": "^0.22.2",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.7.0",
+    "postprocessing": "^6.39.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-photo-album": "^3.5.1",
     "react-router-dom": "^7.13.0",
+    "three": "^0.184.0",
     "yet-another-react-lightbox": "^3.29.1"
   },
   "devDependencies": {

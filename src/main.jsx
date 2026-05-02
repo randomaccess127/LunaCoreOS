@@ -8,6 +8,7 @@ import './styles/animations.css'
 import './styles/preloader.css'
 import './styles/mobile.css'
 import './styles/candy-theme.css'
+import './styles/scifi-sidebar.css'
 
 
 // ── Service Worker Registration ────────────────────────────────

@@ -67,7 +67,7 @@ export default function AIChatSidebar({ article, articleHtml, onClose }) {
             const rawText = (tempDiv.textContent || tempDiv.innerText || '').trim();
             setArticleContext(rawText);
 
-            const initialPrompt = `You are Luna, an advanced AI research assistant embedded in Lunasdiary — a personal knowledge & journal app. The user is a research student who wants deep, structured, academically rigorous analysis of articles they read.
+            const initialPrompt = `You are Md Ismail, an advanced AI research assistant embedded in Md Ismaildiary — a personal knowledge & journal app. The user is a research student who wants deep, structured, academically rigorous analysis of articles they read.
 
 Article Title: "${article.title}"
 
@@ -177,7 +177,7 @@ After completing the brief, add a short line at the bottom:
                 <div className="ai-sidebar-branding">
                     <div className="ai-sidebar-icon"><GeminiIcon /></div>
                     <div>
-                        <div className="ai-sidebar-label">Luna AI</div>
+                        <div className="ai-sidebar-label">Md Ismail AI</div>
                         <div className="ai-sidebar-subtitle">Powered by Gemini</div>
                     </div>
                 </div>
@@ -214,7 +214,7 @@ After completing the brief, add a short line at the bottom:
                             <GeminiIcon />
                         </div>
                         <p className="ai-analyzing-text">Analyzing article…</p>
-                        <span className="ai-analyzing-sub">Luna is reading and extracting key insights</span>
+                        <span className="ai-analyzing-sub">Md Ismail is reading and extracting key insights</span>
                     </div>
                 )}
 
@@ -246,7 +246,7 @@ After completing the brief, add a short line at the bottom:
                     <input
                         ref={inputRef}
                         className="ai-text-input"
-                        placeholder={loading ? 'Luna is thinking…' : 'Ask anything about this article…'}
+                        placeholder={loading ? 'Md Ismail is thinking…' : 'Ask anything about this article…'}
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -262,7 +262,7 @@ After completing the brief, add a short line at the bottom:
                         <SendIcon />
                     </button>
                 </form>
-                <p className="ai-disclaimer">Luna can make mistakes. Verify important info.</p>
+                <p className="ai-disclaimer">Md Ismail can make mistakes. Verify important info.</p>
             </div>
         </div>
     );
