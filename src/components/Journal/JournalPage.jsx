@@ -3,6 +3,7 @@ import { useJournal } from '../../hooks/useJournal';
 import { SkeletonCard } from '../Shared/Skeleton';
 import MediaRow from '../Shared/MediaRow';
 import JournalCalendar from './JournalCalendar';
+import JournalEditor from './JournalEditor';
 import * as api from '../../services/api';
 import { OfflineCache } from '../../services/offlineCache';
 
@@ -227,27 +228,21 @@ export default function JournalPage() {
         setSavedAt('Uploading media...');
         let timer;
         try {
-            const base64data = await api.fileToBase64(file);
-            setMediaProgress(30);
-
-            timer = setInterval(() => {
-                setMediaProgress(prev => {
-                    const remaining = 100 - prev;
-                    const increment = Math.max(0.1, remaining * 0.05);
-                    const next = prev + increment;
-                    return next >= 99 ? 99 : next;
-                });
-            }, 500);
-
             const res = await api.uploadMedia({
-                base64data, filename: file.name, mime_type: file.type,
+                file, filename: file.name, mime_type: file.type,
                 media_type: mediaType, uploaded_from: 'journal', source_id: active.entry_id,
             });
             
             clearInterval(timer);
             setMediaProgress(100);
 
-            const newItem = { media_id: res.media_id, drive_link: res.drive_link, thumbnail_link: res.thumbnail_link, filename: file.name, display_name: file.name };
+            const newItem = { 
+                media_id: res.media_id, 
+                drive_link: res.drive_link, 
+                thumbnail_link: res.thumbnail_link || res.drive_link, 
+                filename: file.name, 
+                display_name: file.name 
+            };
             
             const refKey = mediaType === 'image' ? 'image_refs' : mediaType === 'audio' ? 'audio_refs' : 'file_refs';
             const currentRefs = draft[refKey] ? draft[refKey].split(',').filter(Boolean) : [];
@@ -527,13 +522,11 @@ export default function JournalPage() {
                                 <input className="field-input tag-input" placeholder="＋ tag" onKeyDown={addTag} />
                             </div>
 
-                            {/* Text area */}
-                            <div className="textarea-container">
-                                <textarea
-                                    className="journal-textarea"
-                                    placeholder="Write your heart out..."
-                                    value={draft.text_content || ''}
-                                    onChange={e => onChange('text_content', e.target.value)}
+                            {/* Tiptap Rich Editor */}
+                            <div className="journal-editor-container">
+                                <JournalEditor 
+                                    content={draft.text_content || ''} 
+                                    onChange={(val) => onChange('text_content', val)}
                                 />
                                 <div className="word-count">{wc} words</div>
                             </div>

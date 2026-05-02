@@ -1166,3 +1166,141 @@
   margin-right: 6px;
   display: inline-block;
 }
+/* ── Math / LaTeX ─────────────────────────────────────────────── */
+.sn-math-node {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--sn-text-mention);
+  font-family: serif;
+  user-select: none;
+}
+
+.sn-math-node:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--sn-accent-purple);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.2);
+}
+
+.katex-display {
+  margin: 1.5em 0;
+  background: rgba(139, 92, 246, 0.03);
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 3px solid var(--sn-accent-purple);
+}
+/* ── LaTeX Modal ─────────────────────────────────────────────── */
+.sn-math-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.sn-math-modal {
+  width: 100%;
+  max-width: 500px;
+  background: var(--sn-sidebar-bg);
+  border: 1px solid var(--sn-border-light);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.sn-math-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--sn-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sn-math-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sn-text-bright);
+}
+
+.sn-math-close {
+  background: transparent;
+  border: none;
+  color: var(--sn-text-muted);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.sn-math-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sn-math-textarea {
+  width: 100%;
+  height: 120px;
+  background: #0a0914 !important;
+  border: 1px solid var(--sn-border) !important;
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--sn-text-bright) !important;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  resize: none;
+}
+
+.sn-math-preview-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--sn-text-muted);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.sn-math-preview-box {
+  min-height: 80px;
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed var(--sn-border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.sn-math-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--sn-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.sn-math-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--sn-border);
+  color: var(--sn-text-muted);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sn-math-insert-btn {
+  background: var(--sn-accent-purple);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}

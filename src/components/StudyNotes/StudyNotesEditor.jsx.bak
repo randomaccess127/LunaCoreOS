@@ -32,8 +32,7 @@ import {
     Mic,
     FileCode,
     Maximize,
-    Minimize,
-    Sigma
+    Minimize
 } from 'lucide-react';
 
 import CodeBlockComponent from './CodeBlockComponent';
@@ -44,9 +43,88 @@ import * as api from '../../services/api';
 import AudioNodeView from './AudioNodeView';
 import ImageNodeView from './ImageNodeView';
 import FileNodeView from './FileNodeView';
-import { MathExtension, AudioExtension, FileExtension } from '../Shared/TiptapExtensions';
 
 const lowlight = createLowlight(common);
+
+// Custom Audio Extension — renders blob URLs as <audio> and Drive URLs as <iframe>
+import { Node, mergeAttributes } from '@tiptap/core';
+const AudioExtension = Node.create({
+    name: 'audio',
+    group: 'block',
+    draggable: true,
+    addAttributes() {
+        return {
+            src: { default: null },
+            media_id: { default: null },
+            filename: { default: null },
+        };
+    },
+    parseHTML() {
+        return [
+            { tag: 'audio[src]', getAttrs: el => ({ 
+                src: el.getAttribute('src'), 
+                media_id: el.getAttribute('data-media-id'),
+                filename: el.getAttribute('data-filename')
+            }) },
+            { tag: 'iframe.sn-audio-iframe', getAttrs: el => ({ 
+                src: el.getAttribute('src'), 
+                media_id: el.getAttribute('data-media-id'),
+                filename: el.getAttribute('data-filename')
+            }) },
+        ];
+    },
+    renderHTML({ HTMLAttributes }) {
+        const src = HTMLAttributes.src || '';
+        const isDrive = src.includes('drive.google.com') || src.includes('docs.google.com');
+        const dataAttrs = { 
+            'data-media-id': HTMLAttributes.media_id,
+            'data-filename': HTMLAttributes.filename 
+        };
+        if (isDrive) {
+            return ['iframe', mergeAttributes(dataAttrs, {
+                src, class: 'sn-audio-iframe', allow: 'autoplay', frameborder: '0',
+            })];
+        }
+        return ['audio', mergeAttributes(dataAttrs, { src, controls: 'controls', class: 'sn-embedded-audio' })];
+    },
+    addNodeView() {
+        return ReactNodeViewRenderer(AudioNodeView);
+    },
+});
+
+// Custom File Extension — renders generic files as mini square links
+const FileExtension = Node.create({
+    name: 'file',
+    group: 'block',
+    atom: true,
+    draggable: true,
+    addAttributes() {
+        return {
+            href: { default: null },
+            filename: { default: null },
+            media_id: { default: null },
+        };
+    },
+    parseHTML() {
+        return [
+            { tag: 'div.sn-media-pill-embed', getAttrs: el => ({ 
+                href: el.getAttribute('data-href'), 
+                filename: el.getAttribute('data-filename'),
+                media_id: el.getAttribute('data-media-id')
+            }) },
+        ];
+    },
+    renderHTML({ HTMLAttributes }) {
+        const { href, filename, media_id } = HTMLAttributes;
+        return ['div', { class: 'sn-media-pill-embed', 'data-href': href, 'data-filename': filename, 'data-media-id': media_id },
+            ['div', { class: 'sn-media-pill-icon' }, '📄'],
+            ['span', { class: 'sn-media-pill-name' }, filename || 'Attached File']
+        ];
+    },
+    addNodeView() {
+        return ReactNodeViewRenderer(FileNodeView);
+    },
+});
 
 export default function StudyNotesEditor({
     note,
@@ -57,9 +135,6 @@ export default function StudyNotesEditor({
     onTriggerAutoSave,
     onDelete,
 }) {
-    const [mathModalOpen, setMathModalOpen] = useState(false);
-    const [mathInput, setMathInput] = useState('');
-    
     const fileInputRef = useRef(null);
     const codeInputRef = useRef(null);
     const mediaRecorderRef = useRef(null);
@@ -163,7 +238,6 @@ export default function StudyNotesEditor({
             }),
             AudioExtension,
             FileExtension,
-            MathExtension,
         ],
         content: note.content || '',
         editorProps: {
@@ -177,19 +251,20 @@ export default function StudyNotesEditor({
                 if (imageItem) {
                     const file = imageItem.getAsFile();
                     if (file) {
-                        // Create a temporary ObjectURL to show immediate feedback (High Perf)
-                        const previewUrl = URL.createObjectURL(file);
-                        
-                        // Insert a placeholder/temp image
-                        view.dispatch(view.state.tr.replaceSelectionWith(
-                            view.state.schema.nodes.image.create({ src: previewUrl })
-                        ));
+                        // Create a temporary base64 to show immediate feedback
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            const base64data = e.target.result;
+                            
+                            // Insert a placeholder/temp image
+                            view.dispatch(view.state.tr.replaceSelectionWith(
+                                view.state.schema.nodes.image.create({ src: base64data })
+                            ));
 
-                        // Trigger the real upload logic in background
-                        (async () => {
+                            // Trigger the real upload logic
                             try {
                                 const res = await api.uploadMedia({
-                                    file: file,
+                                    base64data: base64data.split(',')[1],
                                     filename: `pasted_image_${Date.now()}.png`,
                                     mime_type: file.type,
                                     media_type: 'image',
@@ -200,45 +275,25 @@ export default function StudyNotesEditor({
                                 if (res.drive_link) {
                                     const driveUrl = await api.getStreamableUrl(res.drive_link, 'large');
                                     
-                                    // Update the editor: replace the preview with the persistent URL
+                                    // Update the editor: replace the base64 with the Drive URL
                                     const { tr } = view.state;
-                                    let found = false;
                                     view.state.doc.descendants((node, pos) => {
-                                        if (node.type.name === 'image' && node.attrs.src === previewUrl) {
+                                        if (node.type.name === 'image' && node.attrs.src === base64data) {
                                             tr.setNodeMarkup(pos, null, { ...node.attrs, src: driveUrl, media_id: res.media_id });
-                                            found = true;
                                         }
                                     });
-                                    
-                                    if (found) {
-                                        view.dispatch(tr);
-                                        // Force a save immediately after replacement — Use REF to prevent stale data
-                                        const currentImages = noteRef.current.image_urls ? noteRef.current.image_urls.split(',').filter(Boolean) : [];
-                                        const newImageUrls = currentImages.includes(res.media_id) ? currentImages.join(',') : [...currentImages, res.media_id].join(',');
-                                        
-                                        onSave({ 
-                                            image_urls: newImageUrls,
-                                            content: view.state.doc.firstChild.content.size > 0 ? view.dom.innerHTML : '' // Get latest HTML
-                                        });
-                                    }
-                                    
-                                    URL.revokeObjectURL(previewUrl);
+                                    view.dispatch(tr);
+
+                                    // Refresh the media panel
                                     setTimeout(() => setRefreshMedia(Date.now()), 500);
                                 }
                             } catch (err) {
                                 console.error('Paste upload failed:', err);
                             }
-                        })();
-                        
+                        };
+                        reader.readAsDataURL(file);
                         return true; // Handled
                     }
-                }
-                // 2. Handle LaTeX Auto-Rendering on Paste
-                const text = event.clipboardData?.getData('text/plain');
-                if (text && (text.includes('$') || text.includes('$$'))) {
-                    // We'll let Tiptap handle the transformation via the PasteRules we added.
-                    // Returning false here ensures we don't block the standard text processing.
-                    return false; 
                 }
                 return false;
             }
@@ -247,10 +302,13 @@ export default function StudyNotesEditor({
             if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
             const currentHTML = editor.getHTML();
             window.snSaveTimeout = setTimeout(() => {
-                // When typing, ONLY send content. 
-                // Let handleUpdateNote merge it with existing media IDs.
+                // Read media urls from ref so we never overwrite them with stale closure values
+                const latestNote = noteRef.current;
                 onTriggerAutoSave({
                     content: currentHTML,
+                    audio_urls: latestNote.audio_urls,
+                    image_urls: latestNote.image_urls,
+                    file_urls:  latestNote.file_urls,
                 });
             }, 1500);
         },
@@ -392,8 +450,15 @@ export default function StudyNotesEditor({
                 }).run();
 
                 try {
+                    const base64data = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+
                     const res = await api.uploadMedia({
-                        file: blob,
+                        base64data,
                         filename,
                         mime_type: mimeType,
                         media_type: 'audio',
@@ -402,8 +467,9 @@ export default function StudyNotesEditor({
                     });
 
                     if (res.drive_link) {
-                        // Use the streamable URL (Handles both Supabase and Google Drive)
-                        const driveUrl = await api.getStreamableUrl(res.drive_link, 'view');
+                        // Use Drive /preview URL — this is the only reliable way to stream audio
+                        const driveFileId = res.drive_link.match(/\/d\/([^/]+)/)?.[1];
+                        const driveUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
                         // Find and update the placeholder node using a transaction
                         const { state, view } = editor;
                         const { tr } = state;
@@ -427,13 +493,14 @@ export default function StudyNotesEditor({
                             view.dispatch(tr);
                         }
 
-                        const currentMedia = noteRef.current.audio_urls ? noteRef.current.audio_urls.split(',').filter(Boolean) : [];
+                        const currentMedia = note.audio_urls ? note.audio_urls.split(',').filter(Boolean) : [];
                         const newMediaUrls = currentMedia.includes(res.media_id)
                             ? currentMedia.join(',')
                             : [...currentMedia, res.media_id].join(',');
 
                         if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
                         onSave({
+                            ...note,
                             audio_urls: newMediaUrls,
                             content: editor.getHTML()
                         });
@@ -468,12 +535,14 @@ export default function StudyNotesEditor({
         if (!file) return;
 
         try {
+            const base64data = await api.fileToBase64(file);
+
             // Upload to get the media record
             const res = await api.uploadMedia({
-                file: file,
+                base64data,
                 filename: file.name,
                 mime_type: file.type,
-                media_type: 'file', 
+                media_type: 'file', // Changed from 'document' to 'file' to match MediaAttachmentsPanel
                 uploaded_from: 'studynotes_inline',
                 source_id: note.note_id
             });
@@ -517,17 +586,18 @@ export default function StudyNotesEditor({
         if (!file) return;
 
         try {
-            // Step 1: Use ObjectURL immediately so user sees it right away (High Perf, 0 RAM)
-            const previewUrl = URL.createObjectURL(file);
+            const base64data = await api.fileToBase64(file);
+            // Step 1: Insert base64 immediately so user sees it right away
+            const dataUri = `data:${file.type};base64,${base64data}`;
             editor?.chain().focus().setImage({ 
-                src: previewUrl,
+                src: dataUri,
                 alt: file.name,
                 title: file.name
             }).run();
 
-            // Step 2: Upload to Drive in background using the RAW File object
+            // Step 2: Upload to Drive in background
             const res = await api.uploadMedia({
-                file, // Pass raw File object
+                base64data,
                 filename: file.name,
                 mime_type: file.type,
                 media_type: 'image',
@@ -536,58 +606,43 @@ export default function StudyNotesEditor({
             });
 
             if (res.drive_link) {
-                // Step 3: Replace temporary preview with persistent URL (Handles Supabase & Drive)
+                // Step 3: Replace base64 in editor with persistent Drive URL
+                // This is critical — base64 is too large for Google Sheets cells
                 const driveUrl = await api.getStreamableUrl(res.drive_link, 'large');
+                const json = editor.getJSON();
                 
-                const { state, view } = editor;
-                const { tr } = state;
-                let found = false;
-                
-                state.doc.descendants((node, pos) => {
-                    if (node.type.name === 'image' && node.attrs?.src === previewUrl) {
-                        tr.setNodeMarkup(pos, null, { ...node.attrs, src: driveUrl, media_id: res.media_id });
-                        found = true;
+                const replaceBase64 = (nodes) => {
+                    if (!nodes) return;
+                    for (const node of nodes) {
+                        if (node.type === 'image' && node.attrs?.src === dataUri) {
+                            node.attrs.src = driveUrl;
+                            node.attrs.media_id = res.media_id; // store for delete sync
+                        }
+                        replaceBase64(node.content);
                     }
-                });
+                };
+                replaceBase64(json.content);
+                editor.commands.setContent(json, false);
 
-                if (found) {
-                    view.dispatch(tr);
-                }
-                
-                // Cleanup browser memory
-                URL.revokeObjectURL(previewUrl);
-
-                // Step 4: Finalize and Save using a Smarter Scan (Merge with existing shelf IDs)
-                const embeddedIds = { images: [], audio: [] };
-                editor.state.doc.descendants(node => {
-                    if (node.type.name === 'image' && node.attrs.media_id) {
-                        embeddedIds.images.push(node.attrs.media_id);
-                    } else if (node.type.name === 'audio' && node.attrs.media_id) {
-                        embeddedIds.audio.push(node.attrs.media_id);
-                    }
-                });
-
-                // Get current IDs from the note (to preserve shelf/attachment uploads)
-                // IMPORTANT: Use noteRef.current to avoid stale closures
-                const currentImages = noteRef.current.image_urls ? noteRef.current.image_urls.split(',').filter(Boolean) : [];
-                const currentAudio = noteRef.current.audio_urls ? noteRef.current.audio_urls.split(',').filter(Boolean) : [];
-
-                // Combine (use Set to prevent duplicates)
-                const finalImages = [...new Set([...currentImages, ...embeddedIds.images])];
-                const finalAudio = [...new Set([...currentAudio, ...embeddedIds.audio])];
+                // Step 4: Save with the Drive URL content (not base64)
+                const currentImages = note.image_urls ? note.image_urls.split(',').filter(Boolean) : [];
+                const newImageUrls = currentImages.includes(res.media_id) 
+                    ? currentImages.join(',') 
+                    : [...currentImages, res.media_id].join(',');
 
                 if (window.snSaveTimeout) clearTimeout(window.snSaveTimeout);
                 onSave({ 
-                    image_urls: finalImages.join(','),
-                    audio_urls: finalAudio.join(','),
-                    content: editor.getHTML()
+                    ...note,
+                    image_urls: newImageUrls,
+                    content: editor.getHTML()  // Now contains Drive URL, not base64
                 });
 
+                // Small delay to ensure DB consistency before refresh
                 setTimeout(() => setRefreshMedia(Date.now()), 500);
             }
         } catch (err) {
             console.error('Inline upload failed:', err);
-            alert(`Failed to upload media: ${err.message}`);
+            alert(`Failed to upload image to Drive: ${err.message}`);
         }
         
         e.target.value = '';
@@ -722,141 +777,9 @@ export default function StudyNotesEditor({
                 <button className="sn-toolbar-btn" onClick={() => editor?.chain().focus().setHorizontalRule().run()}><Minus size={16} /></button>
                 <div className="sn-toolbar-sep" />
                 <button className="sn-toolbar-btn" onClick={() => editor?.chain().focus().insertContent('@').run()}><AtSign size={16} /></button>
-                <button 
-                    className="sn-toolbar-btn" 
-                    onClick={() => {
-                        setMathInput('');
-                        setMathModalOpen(true);
-                    }} 
-                    title="Insert Math (LaTeX)"
-                >
-                    <Sigma size={16} style={{ marginRight: '6px' }} />
-                    LaTeX
-                </button>
                 <span className="sn-toolbar-word-count">{wordCount} words</span>
                 <button className="sn-toolbar-btn" onClick={onDelete} style={{ color: '#ef4444' }}><Trash2 size={16} /></button>
             </div>
-
-            {/* LaTeX INSERT MODAL */}
-            {mathModalOpen && (
-                <div className="sn-math-modal-overlay">
-                    <div className="sn-math-modal">
-                        <div className="sn-math-modal-header">
-                            <h3>Insert LaTeX Formula</h3>
-                            <button className="sn-math-close" onClick={() => setMathModalOpen(false)}>×</button>
-                        </div>
-                        <div className="sn-math-modal-body">
-                            <textarea 
-                                className="sn-math-textarea"
-                                placeholder="Paste your LaTeX here... (e.g. \int x^2 dx)"
-                                value={mathInput}
-                                onChange={e => setMathInput(e.target.value)}
-                                autoFocus
-                            />
-                            <div className="sn-math-preview-label">Preview</div>
-                            <div className="sn-math-preview-box" id="sn-math-preview">
-                                {(() => {
-                                    if (!mathInput) return <span style={{ color: 'var(--sn-text-hint)' }}>Formula preview will appear here...</span>;
-                                    try {
-                                        // Use the same parsing logic for the preview
-                                        let p = mathInput
-                                            .replace(/&/g, '&amp;')
-                                            .replace(/</g, '&lt;')
-                                            .replace(/>/g, '&gt;');
-                                        
-                                        // Detect patterns and replace with rendered KaTeX
-                                        p = p.replace(/genui\{"math_block_widget_always_prefetch_v2":\{"content":"(.*?)"\}\}/gs, (m, p1) => {
-                                            return window.katex.renderToString(p1, { throwOnError: false });
-                                        });
-                                        p = p.replace(/\$\$(.*?)\$\$/gs, (m, p1) => window.katex.renderToString(p1, { throwOnError: false, displayMode: true }));
-                                        p = p.replace(/\\\[(.*?)\\\]/gs, (m, p1) => window.katex.renderToString(p1, { throwOnError: false, displayMode: true }));
-                                        p = p.replace(/\$(.*?)\$/g, (m, p1) => window.katex.renderToString(p1, { throwOnError: false }));
-                                        p = p.replace(/\\\((.*?)\\\)/g, (m, p1) => window.katex.renderToString(p1, { throwOnError: false }));
-                                        
-                                        // Simple auto-detect for raw \frac etc if no delimiters found
-                                        if (p === mathInput && p.includes('\\')) {
-                                            return <div dangerouslySetInnerHTML={{ __html: window.katex.renderToString(p, { throwOnError: false, displayMode: true }) }} />;
-                                        }
-
-                                        return <div style={{ width: '100%', textAlign: 'left' }} dangerouslySetInnerHTML={{ __html: p.replace(/\n/g, '<br/>') }} />;
-                                    } catch (e) {
-                                        return <span style={{ color: '#ef4444' }}>Parsing error...</span>;
-                                    }
-                                })()}
-                            </div>
-                        </div>
-                        <div className="sn-math-modal-footer">
-                            <button className="sn-math-cancel-btn" onClick={() => setMathModalOpen(false)}>Cancel</button>
-                            <button 
-                                className="sn-math-insert-btn"
-                                onClick={() => {
-                                    if (mathInput.trim()) {
-                                        // POWER PARSER: Detect all math patterns and convert to HTML for Tiptap
-                                        let processed = mathInput
-                                            .replace(/&/g, '&amp;')
-                                            .replace(/</g, '&lt;')
-                                            .replace(/>/g, '&gt;');
-
-                                        // 1. Handle genui blocks first (most specific)
-                                        processed = processed.replace(/genui\{"math_block_widget_always_prefetch_v2":\{"content":"(.*?)"\}\}/gs, (m, p1) => {
-                                            return `<span class="sn-math-inline" data-latex="${p1}"></span>`;
-                                        });
-
-                                        // 2. Handle block math: $$...$$ and \[...\]
-                                        processed = processed.replace(/\$\$(.*?)\$\$/gs, (m, p1) => `<span class="sn-math-inline" data-latex="${p1}"></span>`);
-                                        processed = processed.replace(/\\\[(.*?)\\\]/gs, (m, p1) => `<span class="sn-math-inline" data-latex="${p1}"></span>`);
-
-                                        // 3. Handle inline math: $...$ and \(...\)
-                                        processed = processed.replace(/\$(.*?)\$/g, (m, p1) => `<span class="sn-math-inline" data-latex="${p1}"></span>`);
-                                        processed = processed.replace(/\\\((.*?)\\\)/g, (m, p1) => `<span class="sn-math-inline" data-latex="${p1}"></span>`);
-
-                                        // 4. FORMULA-AWARE PARSER
-                                        // We look for LaTeX commands and equations without breaking them on spaces
-                                        const lines = processed.split('\n');
-                                        const formattedLines = lines.map(line => {
-                                            // Split by already processed math nodes
-                                            const parts = line.split(/(<span.*?>.*?<\/span>)/g);
-                                            const parsedParts = parts.map(part => {
-                                                if (part.startsWith('<span')) return part;
-                                                
-                                                // Detection logic: Find sequences that look like equations
-                                                // - Starts with \command
-                                                // - Contains = with variables/numbers
-                                                // - Multi-char variables with subscripts
-                                                let subPart = part;
-                                                
-                                                // A. Find complex LaTeX commands first (e.g. \frac{...}{...})
-                                                subPart = subPart.replace(/\\[a-zA-Z]+(\{.*?\}|\[.*?\])*/g, (m) => {
-                                                    return `<span class="sn-math-inline" data-latex="${m}"></span>`;
-                                                });
-
-                                                // B. Find equations (e.g. v = d/t)
-                                                // Look for patterns like variable = something-mathy
-                                                subPart = subPart.replace(/([a-zA-Z0-9_{}]+\s*=\s*[^,.;\s]+)/g, (m) => {
-                                                    // Only convert if not already inside a tag
-                                                    if (m.includes('<span')) return m;
-                                                    return `<span class="sn-math-inline" data-latex="${m}"></span>`;
-                                                });
-
-                                                return subPart;
-                                            });
-                                            
-                                            const content = parsedParts.join('');
-                                            return content.trim() ? `<p>${content}</p>` : '<p><br></p>';
-                                        });
-
-                                        const html = formattedLines.join('');
-                                        editor?.chain().focus().insertContent(html).run();
-                                        setMathModalOpen(false);
-                                    }
-                                }}
-                            >
-                                Insert & Format
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* 4. WRITING AREA */}
             <div className="sn-editor-writing-area">

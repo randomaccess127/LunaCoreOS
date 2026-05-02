@@ -3015,3 +3015,98 @@ textarea.field-input {
     to { transform: rotate(360deg); }
 }
 
+
+/* -- Journal Rich Editor ------------------------------------------ */
+.journal-editor-rich {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px solid var(--sn-border);
+  overflow: hidden;
+}
+
+.journal-toolbar {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--sn-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  backdrop-filter: blur(5px);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--sn-border);
+  margin: 0 4px;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--sn-text-muted);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sn-text-bright);
+}
+
+.toolbar-btn.active {
+  background: var(--sn-accent-purple);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.latex-btn {
+  width: auto;
+  padding: 0 8px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sn-accent-purple);
+}
+
+.latex-btn:hover {
+  background: rgba(162, 155, 254, 0.1);
+}
+
+.journal-tiptap-container {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  color: var(--sn-text-bright);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.journal-tiptap-container .ProseMirror {
+  outline: none;
+  min-height: 300px;
+}
+
+.journal-tiptap-container .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--sn-text-hint);
+  pointer-events: none;
+  height: 0;
+}

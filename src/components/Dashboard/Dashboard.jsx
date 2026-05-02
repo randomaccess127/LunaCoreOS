@@ -2,7 +2,6 @@ import { useDashboard } from '../../hooks/useDashboard';
 import { SkeletonCard } from '../Shared/Skeleton';
 import StatsRow from './StatsRow';
 import TodayTodos from './TodayTodos';
-import TodayHabits from './TodayHabits';
 import RecentJournal from './RecentJournal';
 import WeeklyStrip from './WeeklyStrip';
 import InsightsToReview from './InsightsToReview';
@@ -73,9 +72,8 @@ export default function Dashboard({ onNavigate }) {
             )}
 
             {/* Todos + Habits */}
-            <div className="two-col">
+            <div className="one-col">
                 <TodayTodos todos={stats?.today_todos || []} onRefresh={() => { }} onNavigate={onNavigate} />
-                <TodayHabits habits={stats?.active_habits || []} logs={stats?.today_habit_logs || []} />
             </div>
 
             {/* Recent Journal */}
@@ -104,11 +102,6 @@ export default function Dashboard({ onNavigate }) {
                         <WeeklyStrip days={stats?.weekly_strip || []} />
                     </div>
                     <div className="dashboard-activity-side">
-                        <DashboardActivityGraph
-                            title="Streak activity"
-                            activity={stats?.streak_activity || []}
-                            color="#ff7675"
-                        />
                         <DashboardActivityGraph
                             title="Mind Activity"
                             activity={stats?.thought_activity || []}

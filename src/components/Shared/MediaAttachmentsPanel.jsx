@@ -55,9 +55,9 @@ export default function MediaAttachmentsPanel({ sourceId, onMediaChange, refresh
     const handleUpload = async (file, mediaType) => {
         if (!sourceId || !file) return;
 
-        const MAX_SIZE = 45 * 1024 * 1024;
+        const MAX_SIZE = 5 * 1024 * 1024 * 1024; // 5GB Limit (Google Drive Native)
         if (file.size > MAX_SIZE) {
-            alert(`File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max 45MB.`);
+            alert(`File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max 5GB.`);
             return;
         }
 
@@ -71,7 +71,6 @@ export default function MediaAttachmentsPanel({ sourceId, onMediaChange, refresh
         setProgress(10);
         let timer;
         try {
-            const base64data = await api.fileToBase64(file);
             setProgress(30);
 
             timer = setInterval(() => {
@@ -84,11 +83,11 @@ export default function MediaAttachmentsPanel({ sourceId, onMediaChange, refresh
             }, 500);
 
             const res = await api.uploadMedia({
-                base64data,
+                file, 
                 filename: file.name,
                 mime_type: file.type,
                 media_type: mediaType,
-                uploaded_from: 'studynotes', // or keep as generic
+                uploaded_from: 'studynotes', 
                 source_id: sourceId,
             });
 
@@ -103,21 +102,28 @@ export default function MediaAttachmentsPanel({ sourceId, onMediaChange, refresh
                 display_name: file.name,
                 media_type: mediaType
             };
- 
-            let finalRefs;
+
+            // Update local state
             setMediaItems(prev => {
                 const typeKey = mediaType === 'image' ? 'images' : (mediaType === 'audio' ? 'audio' : 'files');
-                const newState = { ...prev, [typeKey]: [...prev[typeKey], newItem] };
-                finalRefs = {
-                    audio_refs: newState.audio.map(m => m.media_id).join(','),
-                    image_refs: newState.images.map(m => m.media_id).join(','),
-                    file_refs: newState.files.map(m => m.media_id).join(',')
-                };
-                return newState;
+                return { ...prev, [typeKey]: [...prev[typeKey], newItem] };
             });
- 
-            // Notify parent OUTSIDE of the setState functional update
-            if (onMediaChange && finalRefs) {
+
+            // Calculate refs based on the NEW state (existing items + the one we just added)
+            const updatedItems = {
+                audio: mediaType === 'audio' ? [...mediaItems.audio, newItem] : mediaItems.audio,
+                images: mediaType === 'image' ? [...mediaItems.images, newItem] : mediaItems.images,
+                files: mediaType === 'file' ? [...mediaItems.files, newItem] : mediaItems.files
+            };
+
+            const finalRefs = {
+                audio_refs: updatedItems.audio.map(m => m.media_id).join(','),
+                image_refs: updatedItems.images.map(m => m.media_id).join(','),
+                file_refs: updatedItems.files.map(m => m.media_id).join(',')
+            };
+
+            // Notify parent immediately
+            if (onMediaChange) {
                 onMediaChange(finalRefs);
             }
 

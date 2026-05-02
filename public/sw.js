@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
     if (!url.startsWith('http')) return;
 
     // Bypass Vite HMR and dev server requests
-    if (url.includes('?t=') || url.includes('@vite') || url.includes('.jsx')) {
+    if (url.includes('?t=') || url.includes('@vite') || url.includes('.jsx') || url.includes('.js')) {
         return;
     }
 

@@ -98,12 +98,16 @@ function FilePreviewModal({ item, onClose }) {
                             <p style={{ color: 'white', fontWeight: 700, fontSize: '1rem', margin: '0 0 0.25rem' }}>{item.display_name || item.filename}</p>
                             <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Audio File</p>
                         </div>
-                        <iframe
-                            src={`https://drive.google.com/file/d/${item.drive_file_id}/preview`}
-                            style={{ width: '100%', maxWidth: '520px', height: '80px', border: 'none', borderRadius: '12px', background: 'rgba(0,0,0,0.4)' }}
-                            allow="autoplay"
-                            title={item.display_name}
-                        />
+                        {item.drive_link.includes('supabase') ? (
+                            <audio src={item.drive_link} controls style={{ width: '100%', maxWidth: '520px' }} />
+                        ) : (
+                            <iframe
+                                src={`https://drive.google.com/file/d/${item.drive_file_id}/preview`}
+                                style={{ width: '100%', maxWidth: '520px', height: '80px', border: 'none', borderRadius: '12px', background: 'rgba(0,0,0,0.4)' }}
+                                allow="autoplay"
+                                title={item.display_name}
+                            />
+                        )}
                     </div>
                 )}
             </div>

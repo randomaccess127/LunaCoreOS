@@ -254,77 +254,29 @@ export const saveVaultIndex = async (folderId, indexData) => {
 };
 
 
-// ─── Supabase Storage ────────────────────────────────────────────────────────
-export const uploadToSupabase = async (fileOrBlob, bucket = 'study-notes') => {
-    // 1. Generate a unique filename
-    const fileExt = fileOrBlob.name ? fileOrBlob.name.split('.').pop() : 'bin';
-    const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    // 2. Upload
-    const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, fileOrBlob, {
-            cacheControl: '3600',
-            upsert: false
-        });
-
-    if (error) {
-        if (error.message.includes('bucket not found')) {
-            throw new Error(`Supabase Storage bucket "${bucket}" not found. Please create it in your Supabase dashboard.`);
-        }
-        throw error;
-    }
-
-    // 3. Get Public URL
-    const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(filePath);
-
-    return { id: data.path, url: publicUrl };
-};
-
-
 // ─── Media ───────────────────────────────────────────────────────────────────
 export const uploadMedia = async (params) => {
     // Intercept Study Notes uploads and push to the new Drive folder
-    // Support either raw File object or base64 fallback
-    const fileSource = params.file || params.base64data;
-    
-    if (fileSource) {
+    if (params.base64data) {
+        const { uploadFileToDrive } = await import('./googleAuth');
+        const STUDY_NOTES_FOLDER = '1AzUURpktKPFbUhTIQmzyCy3VjfyfO3eB';
+        
         try {
-            // For Study Notes, we now prefer Supabase Storage (Faster, No Quota Issues)
-            const bucket = 'study-notes';
-            const { id, url } = await uploadToSupabase(fileSource, bucket);
+            const driveRes = await uploadFileToDrive(
+                params.base64data, 
+                params.filename || 'Untitled Media', 
+                params.mime_type || 'application/octet-stream', 
+                STUDY_NOTES_FOLDER
+            );
             
-            params.drive_file_id = id; // Store the path as ID
-            params.drive_link = url;    // Store the public URL
-            
-            // Clean up heavy properties
+            // Append drive info to the payload
+            params.drive_file_id = driveRes.id;
+            params.drive_link = driveRes.webViewLink || `https://drive.google.com/file/d/${driveRes.id}/view`;
+            // Remove base64 payload to save database space
             delete params.base64data;
-            delete params.file;
         } catch (err) {
-            console.error('Supabase Storage upload failed:', err);
-            
-            // Fallback to Google Drive if bucket isn't ready or other error
-            console.log('Attempting fallback to Google Drive...');
-            try {
-                const { uploadFileToDrive } = await import('./googleAuth');
-                const STUDY_NOTES_FOLDER = '1hWZY9Uk-0u5pgUOEYVER91IPdReEVxuk';
-                const driveRes = await uploadFileToDrive(
-                    fileSource, 
-                    params.filename || 'Untitled Media', 
-                    params.mime_type || 'application/octet-stream', 
-                    STUDY_NOTES_FOLDER
-                );
-                params.drive_file_id = driveRes.id;
-                params.drive_link = driveRes.webViewLink || `https://drive.google.com/file/d/${driveRes.id}/view`;
-                delete params.base64data;
-                delete params.file;
-            } catch (driveErr) {
-                console.error('All upload methods failed:', driveErr);
-                throw driveErr;
-            }
+            console.error('Drive upload failed:', err);
+            throw err; // Fail hard if Drive upload fails
         }
     }
 

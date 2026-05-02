@@ -3,6 +3,7 @@ import { useMedia } from '../../hooks/useMedia';
 import Lightbox from '../Shared/Lightbox';
 import SmartThumbnail from '../Shared/SmartThumbnail';
 import { SkeletonCard } from '../Shared/Skeleton';
+import { requestPermanentDriveAccess, clearDriveToken } from '../../services/googleAuth';
 
 const TYPE_ICONS = { audio: '🔊', image: '🖼️', file: '📎', video: '🎬' };
 
@@ -11,6 +12,16 @@ export default function MediaLibraryPage() {
     const [filter, setFilter] = useState('all');
     const [lb, setLb] = useState(null);
     const [search, setSearch] = useState('');
+    const [isAuthorized, setIsAuthorized] = useState(!!sessionStorage.getItem('luna_drive_token'));
+
+    const handleAuth = async () => {
+        try {
+            await requestPermanentDriveAccess();
+            setIsAuthorized(true);
+        } catch (err) {
+            console.error('Auth failed:', err);
+        }
+    };
 
     const confirmRemove = (item) => {
         const label = item.display_name || item.filename;
@@ -43,7 +54,27 @@ export default function MediaLibraryPage() {
         <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <h2 style={{ fontSize: '1.3rem', fontWeight: 700 }}>🖼️ Media Library</h2>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {!isAuthorized ? (
+                        <button 
+                            className="btn btn-sm" 
+                            style={{ 
+                                background: 'rgba(66, 133, 244, 0.1)', 
+                                border: '1px solid rgba(66, 133, 244, 0.3)',
+                                color: '#4285F4',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.4rem'
+                            }}
+                            onClick={handleAuth}
+                        >
+                            <span style={{ fontSize: '1rem' }}>🆔</span> Authorize Drive
+                        </button>
+                    ) : (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', background: 'rgba(255,255,255,0.05)', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
+                            ✅ Linked
+                        </span>
+                    )}
                     <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
                         ⬆ Upload
                         <input type="file" hidden onChange={handleUpload} />
