@@ -1,4 +1,4 @@
-import { scanDriveFolder, requestDriveAccess } from './googleAuth';
+import { scanDriveFolder, scanDriveFolderIdsOnly, requestDriveAccess } from './googleAuth';
 import { supabase } from './supabaseClient';
 export { supabase };
 
@@ -448,11 +448,59 @@ export const toggleTwitchLiked = async (params) => {
 // â”€â”€â”€ Vault Logic (Native) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
-export const getVaultMedia = async (folderId, continuationToken) => {
+export const getVaultMedia = async (folderId, forceResync = false) => {
     try {
-        const items = await scanDriveFolder(folderId);
-        return { success: true, items };
+        let index = null;
+        if (!forceResync) {
+            index = await getVaultIndex(folderId);
+        }
+
+        // If old format (allItems exists), force a fresh migration scan
+        if (index && index.allItems) {
+            index = null; 
+        }
+
+        let newFiles = [];
+        let fetchedAt = null;
+
+        if (!index) {
+            // 1. Full scan (First time or forced)
+            const res = await scanDriveFolderIdsOnly(folderId, null);
+            newFiles = res.files;
+            fetchedAt = res.fetchedAt;
+        } else {
+            // 2. Delta scan (Only new files since last sync)
+            const res = await scanDriveFolderIdsOnly(folderId, index.lastSyncedAt);
+            newFiles = res.files;
+            fetchedAt = res.fetchedAt;
+        }
+
+        // If we have an existing index, merge the new files
+        let allIds = index ? index.ids || [] : [];
+        let allNames = index ? index.names || [] : [];
+        let allMimes = index ? index.mimeTypes || [] : [];
+
+        if (newFiles.length > 0) {
+            for (const file of newFiles) {
+                allIds.push(file.id);
+                allNames.push(file.name);
+                allMimes.push(file.mimeType);
+            }
+        }
+
+        const newIndex = {
+            ids: allIds,
+            names: allNames,
+            mimeTypes: allMimes,
+            lastSyncedAt: fetchedAt || (index ? index.lastSyncedAt : new Date().toISOString())
+        };
+
+        // Save back to Supabase
+        await saveVaultIndex(folderId, newIndex);
+
+        return { success: true, index: newIndex, newCount: newFiles.length };
     } catch (err) {
+        console.error('getVaultMedia error:', err);
         return { success: false, error: err.message };
     }
 };

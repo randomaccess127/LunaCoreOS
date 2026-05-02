@@ -260,6 +260,43 @@ export const scanDriveFolder = async (folderId, filter = '') => {
     return allFiles;
 };
 
+export const scanDriveFolderIdsOnly = async (folderId, sinceDate = null) => {
+    const token = await requestDriveAccess();
+    let allFiles = [];
+    let pageToken = null;
+
+    let baseQuery = `'${folderId}' in parents and trashed = false`;
+    if (sinceDate) {
+        baseQuery += ` and modifiedTime > '${sinceDate}'`;
+    }
+    const fields = 'nextPageToken, files(id, name, mimeType)';
+
+    do {
+        const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(baseQuery)}&fields=${encodeURIComponent(fields)}&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ''}`;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
+        if (res.status === 401) {
+            await clearDriveToken();
+            const freshToken = await requestDriveAccess();
+            res = await fetch(url, { headers: { Authorization: `Bearer ${freshToken}` } });
+        }
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error?.message || 'Failed to scan Drive folder');
+        }
+
+        const data = await res.json();
+        allFiles = allFiles.concat(data.files || []);
+        pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    return {
+        files: allFiles,
+        fetchedAt: new Date().toISOString()
+    };
+};
+
 // ── Drive File Uploader ───────────────────────────────────────
 export const uploadFileToDrive = async (base64Data, filename, mimeType, folderId) => {
     const token = await requestDriveAccess();

@@ -276,75 +276,61 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
         if (folder) fetchFolder(folder);
     }, [activeTab, folders]);
 
-    const fetchFolder = async (folder, isLoadMore = false) => {
+    const fetchFolder = async (folder, isLoadMore = false, forceResync = false) => {
         const fid = folder.folder_id || folder.folderId;
-        const cacheKey = `vault_index_${fid}`;
         
-        // 1. Layer 1: Instant Local Load
-        if (!isLoadMore && !folderCache[fid]) {
-            const stored = localStorage.getItem(cacheKey);
-            if (stored) {
-                try {
-                    const data = JSON.parse(stored);
-                    setFolderCache(c => ({ ...c, [fid]: data }));
-                } catch (e) { }
-            }
-        }
-
-        // 2. Layer 2: Cloud Sync (Supabase)
-        if (!isLoadMore) {
-            try {
-                const cloudData = await getVaultIndex(fid);
-                if (cloudData) {
-                    setFolderCache(c => ({ ...c, [fid]: cloudData }));
-                    try {
-                        localStorage.setItem(cacheKey, JSON.stringify(cloudData));
-                    } catch (e) { console.warn("Local cache quota exceeded."); }
-                }
-            } catch (e) { console.warn("Cloud sync failed:", e); }
-        }
-
-        const currentData = folderCache[fid] || { allItems: [], displayedItems: [], nextToken: null };
-        
+        // In-memory load more
         if (isLoadMore) {
-            const currentCount = currentData.displayedItems.length;
-            const nextBatch = currentData.allItems.slice(currentCount, currentCount + 50);
-            const newData = { ...currentData, displayedItems: [...currentData.displayedItems, ...nextBatch] };
-            setFolderCache(c => ({ ...c, [fid]: newData }));
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify(newData));
-            } catch (e) { console.warn("Local cache quota exceeded."); }
-            saveVaultIndex(fid, newData).catch(() => {}); // Optimistic cloud update
+            setFolderCache(c => {
+                const currentData = c[fid];
+                if (!currentData) return c;
+                const currentCount = currentData.displayedItems.length;
+                const nextBatch = currentData.allItems.slice(currentCount, currentCount + 50);
+                return {
+                    ...c,
+                    [fid]: {
+                        ...currentData,
+                        displayedItems: [...currentData.displayedItems, ...nextBatch]
+                    }
+                };
+            });
             return;
         }
 
         setLoading(true);
         try {
-            // Layer 3: Live Drive Scan
-            const res = await getVaultMedia(fid);
-            const raw = res?.items || [];
-            const shuffled = [...raw].sort(() => Math.random() - 0.5);
-            
-            const formatted = shuffled.map(item => {
-                // Always use stable ID-based URL — thumbnailLink from Drive API expires and causes 403
-                const { src, largeSrc } = buildSrcFromId(item.id);
-                return {
-                    id: item.id,
-                    src,
-                    largeSrc,
-                    title: item.name,
-                    type: classifyMime(item.mimeType),
-                };
-            });
+            const res = await getVaultMedia(fid, forceResync);
+            if (res && res.success && res.index) {
+                const index = res.index;
+                const totalCount = index.ids ? index.ids.length : 0;
+                
+                // Shuffle indices
+                const indices = Array.from({ length: totalCount }, (_, i) => i);
+                const shuffledIndices = indices.sort(() => Math.random() - 0.5);
+                
+                // Build items
+                const allItems = shuffledIndices.map(i => {
+                    const id = index.ids[i];
+                    const { src, largeSrc } = buildSrcFromId(id);
+                    return {
+                        id,
+                        src,
+                        largeSrc,
+                        title: index.names ? index.names[i] : 'Untitled',
+                        type: index.mimeTypes ? classifyMime(index.mimeTypes[i]) : 'image'
+                    };
+                });
 
-            const newData = { allItems: formatted, displayedItems: formatted.slice(0, 50), nextToken: null };
-            setFolderCache(c => ({ ...c, [fid]: newData }));
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify(newData));
-            } catch (e) { console.warn("Local cache quota exceeded."); }
-            await saveVaultIndex(fid, newData);
-        } catch (err) { console.error("Index deep sync failed:", err); }
-        finally { setLoading(false); }
+                setFolderCache(c => ({
+                    ...c,
+                    [fid]: { allItems, displayedItems: allItems.slice(0, 50), totalCount }
+                }));
+            }
+        } catch (err) {
+            console.error("Index sync failed:", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const likedIds = new Set(liked.map(l => l.id));
@@ -403,16 +389,34 @@ export default function GooglePhotos({ activeTab, folders, onTabChange }) {
                     <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, margin: 0 }}>{items.length} SHUFFLED ASSETS · {folder.name.toUpperCase()}</p>
                     {loading && <span style={{ fontSize: '0.65rem', color: '#a78bfa', fontWeight: 800, letterSpacing: '0.1em', animation: 'pulse 1.5s infinite' }}>[ SYNCING_DEEP_INDEX ]</span>}
                 </div>
-                <button 
-                    onClick={() => { 
-                        localStorage.removeItem(`vault_index_${folder.folder_id || folder.folderId}`);
-                        setFolderCache(c => { const n = { ...c }; delete n[folder.folder_id || folder.folderId]; return n; }); 
-                        fetchFolder(folder); 
-                    }} 
-                    style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#a78bfa', padding: '6px 14px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                    RESHUFFLE_STREAM
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                        onClick={() => fetchFolder(folder, false, true)} 
+                        style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399', padding: '6px 14px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                        SYNC_DRIVE
+                    </button>
+                    <button 
+                        onClick={() => { 
+                            setFolderCache(c => {
+                                const currentData = c[fid];
+                                if (!currentData) return c;
+                                const shuffled = [...currentData.allItems].sort(() => Math.random() - 0.5);
+                                return {
+                                    ...c,
+                                    [fid]: {
+                                        ...currentData,
+                                        allItems: shuffled,
+                                        displayedItems: shuffled.slice(0, 50)
+                                    }
+                                };
+                            });
+                        }} 
+                        style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#a78bfa', padding: '6px 14px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                        RESHUFFLE_STREAM
+                    </button>
+                </div>
             </div>
             {loading && items.length === 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>

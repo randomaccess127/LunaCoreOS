@@ -57,26 +57,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // 2. Media Caching Strategy: Cache-First
-    const isMedia = MEDIA_PATTERNS.some(p => url.includes(p));
+    // 2. Media Strategy: Network Only (Bypass Cache)
+    // We explicitly do NOT cache Drive images/media to save user disk space.
+    const isMedia = MEDIA_PATTERNS.some(p => url.includes(p)) || url.includes('lh3.googleusercontent.com');
     if (isMedia) {
-        event.respondWith(
-            caches.open(MEDIA_CACHE_NAME).then((cache) => {
-                return cache.match(event.request).then((response) => {
-                    if (response) return response; // Return from cache
-                    
-                    // Otherwise fetch and save to cache
-                    return fetch(event.request).then((networkResponse) => {
-                        if (networkResponse && networkResponse.status === 200) {
-                            cache.put(event.request, networkResponse.clone());
-                        }
-                        return networkResponse;
-                    }).catch((err) => {
-                        throw err; 
-                    });
-                });
-            })
-        );
+        event.respondWith(fetch(event.request));
         return;
     }
 
