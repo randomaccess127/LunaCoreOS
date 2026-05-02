@@ -41,6 +41,8 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
+    // ── Vault Lock: clears automatically when tab is closed ──
+    const [vaultUnlocked, setVaultUnlocked] = useState(() => sessionStorage.getItem('luna_vault_unlocked') === 'true');
 
     const triggerPreload = () => {
         if (preload.active) return;
@@ -55,7 +57,10 @@ export default function App() {
         const initAuth = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
-                setUser(session?.user ?? null);
+                // ── Vault Lock Check ──
+                // Even if Supabase session is valid, require re-entry if tab was closed.
+                const isUnlocked = sessionStorage.getItem('luna_vault_unlocked') === 'true';
+                setUser((session?.user && isUnlocked) ? session.user : null);
             } catch (err) {
                 console.error('Auth session fetch failed:', err);
             } finally {
@@ -197,6 +202,10 @@ export default function App() {
                                 alert('Invalid Master Key. Access Denied.');
                                 loginBtn.disabled = false;
                                 loginBtn.innerText = 'Unlock Sanctuary';
+                            } else {
+                                // ── Set vault lock flag for this tab session ──
+                                sessionStorage.setItem('luna_vault_unlocked', 'true');
+                                setVaultUnlocked(true);
                             }
                         } catch (err) {
                             console.error('Vault login failed:', err);
