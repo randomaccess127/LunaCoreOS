@@ -4,8 +4,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://dfpngowpkozggqiyrtrr.supabase.co",
-  // Add your Render URL here after deployment e.g:
-  // "https://luna-sanctuary.onrender.com",
+  "https://lunacoreos.onrender.com"
 ];
 
 function getCorsHeaders(req: Request) {
